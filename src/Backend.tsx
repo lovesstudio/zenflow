@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { db, Member, Order, MemberLevel, timeToMins, minsToTime, Gender } from './store';
-import { Trash2, TrendingUp, Users, Calendar, DollarSign, Clock, Search, CheckCircle, XCircle, CalendarDays } from 'lucide-react';
+import { Trash2, TrendingUp, Users, Calendar, DollarSign, Clock, Search, CheckCircle, XCircle, CalendarDays, Lock, LogOut } from 'lucide-react';
 
 export default function Backend() {
+  const [isAdminAuthed, setIsAdminAuthed] = useState(false);
+  const [adminPin, setAdminPin] = useState('');
+  
   const [orders, setOrders] = useState<Order[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [tab, setTab] = useState<'orders' | 'members' | 'calendar'>('calendar');
@@ -16,6 +19,28 @@ export default function Backend() {
   const [customerModalOpen, setCustomerModalOpen] = useState<Member | null>(null);
 
   const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm?: () => void} | null>(null);
+
+  useEffect(() => {
+    if (localStorage.getItem('zf_admin_auth') === 'true') {
+      setIsAdminAuthed(true);
+    }
+  }, []);
+
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPin === '123456') {
+      localStorage.setItem('zf_admin_auth', 'true');
+      setIsAdminAuthed(true);
+      setAdminPin('');
+    } else {
+      setConfirmAction({ message: '密碼錯誤' });
+    }
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem('zf_admin_auth');
+    setIsAdminAuthed(false);
+  };
 
   const handleShare = (o: Order) => {
     const m = members.find(x => x.id === o.memberId);
@@ -154,14 +179,66 @@ export default function Backend() {
     }
   };
 
+  if (!isAdminAuthed) {
+    return (
+      <div className="bg-stone-50 min-h-screen text-stone-800 font-sans flex items-center justify-center p-6">
+        <form onSubmit={handleAdminLogin} className="bg-white p-8 rounded-2xl shadow-xl border border-stone-200 max-w-sm w-full animate-in zoom-in">
+          <div className="flex justify-center mb-6">
+            <div className="p-4 bg-stone-100 text-stone-800 rounded-full">
+              <Lock className="w-8 h-8" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-medium text-center text-stone-800 mb-6 font-sans">ZEN FLOW 管理員登入</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-stone-600 mb-2">請輸入管理員密碼</label>
+              <input
+                type="password"
+                value={adminPin}
+                onChange={e => setAdminPin(e.target.value)}
+                className="w-full p-3 border border-stone-200 rounded-xl focus:border-stone-500 outline-none transition text-center tracking-[0.5em] text-lg font-mono"
+                placeholder="••••••"
+                maxLength={6}
+              />
+            </div>
+            <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl hover:bg-stone-700 transition font-medium">
+              登入後台
+            </button>
+            <p className="text-xs text-stone-400 text-center mt-4">預設密碼：123456</p>
+          </div>
+        </form>
+        {confirmAction && (
+          <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-6">
+              <h3 className="text-lg font-medium text-stone-800">系統提示</h3>
+              <p className="text-stone-600 whitespace-pre-wrap">{confirmAction.message}</p>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => setConfirmAction(null)} 
+                  className="flex-1 px-4 py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition"
+                >
+                  確認
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-stone-50 min-h-screen text-stone-800 font-sans">
       <div className="bg-stone-900 text-stone-100 px-6 py-4 flex justify-between items-center shadow-md">
-        <h1 className="text-xl font-light tracking-wide">ZEN FLOW <span className="text-stone-400 text-sm ml-2">管理後台</span></h1>
-        <div className="space-x-1">
-          <button onClick={()=>setTab('calendar')} className={`px-4 py-2 rounded-lg text-sm transition ${tab==='calendar'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>今日視圖</button>
-          <button onClick={()=>setTab('orders')} className={`px-4 py-2 rounded-lg text-sm transition ${tab==='orders'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>訂單管理</button>
-          <button onClick={()=>setTab('members')} className={`px-4 py-2 rounded-lg text-sm transition ${tab==='members'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>會員系統</button>
+        <h1 className="text-xl font-light tracking-wide">ZEN FLOW <span className="text-stone-400 text-sm ml-2 hidden sm:inline">管理後台</span></h1>
+        <div className="space-x-1 flex items-center overflow-x-auto no-scrollbar">
+          <button onClick={()=>setTab('calendar')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='calendar'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>今日視圖</button>
+          <button onClick={()=>setTab('orders')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='orders'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>訂單管理</button>
+          <button onClick={()=>setTab('members')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='members'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>會員系統</button>
+          <button onClick={handleAdminLogout} className="ml-2 px-3 py-2 text-stone-400 hover:text-white transition flex items-center shrink-0">
+            <LogOut className="w-4 h-4 mr-1 md:hidden" />
+            <span className="hidden md:inline">登出</span>
+          </button>
         </div>
       </div>
 
@@ -298,8 +375,8 @@ export default function Backend() {
               <span className="text-xs text-stone-500 flex items-center"><Clock className="w-3 h-3 mr-1"/> 每秒自動更新 (儲存於本機)</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100">
+              <table className="w-full text-left text-sm min-w-[1000px]">
+                <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
                   <tr>
                     <th className="px-6 py-3 font-medium">預約時間</th>
                     <th className="px-6 py-3 font-medium">總時長</th>
@@ -383,8 +460,8 @@ export default function Backend() {
               <h2 className="font-medium text-stone-800">會員列表</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100">
+              <table className="w-full text-left text-sm min-w-[900px]">
+                <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
                   <tr>
                     <th className="px-6 py-3 font-medium cursor-pointer" title="點擊展開/收合消費紀錄">姓名</th>
                     <th className="px-6 py-3 font-medium">性別</th>
