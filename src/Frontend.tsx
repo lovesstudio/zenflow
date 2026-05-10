@@ -32,10 +32,23 @@ export default function Frontend() {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [isPaying, setIsPaying] = useState(false);
 
+  useEffect(() => {
+    const savedPhone = localStorage.getItem('zf_login_phone');
+    if (savedPhone) {
+      setPhone(savedPhone);
+      const m = db.getMemberByPhone(savedPhone);
+      if (m) {
+        setMember(m);
+        setStep(2);
+      }
+    }
+  }, []);
+
   const handleLogin = () => {
     if (!phone) return;
     const m = db.getMemberByPhone(phone);
     if (m) {
+      localStorage.setItem('zf_login_phone', phone);
       setMember(m);
       setStep(2);
     } else {
@@ -54,9 +67,18 @@ export default function Frontend() {
       createdAt: Date.now()
     };
     db.saveMember(newMember);
+    localStorage.setItem('zf_login_phone', phone);
     setMember(newMember);
     setIsRegistering(false);
     setStep(2);
+  };
+  
+  const handleLogout = () => {
+    localStorage.removeItem('zf_login_phone');
+    setMember(null);
+    setPhone('');
+    setCart([]);
+    setStep(1);
   };
 
   const addToCart = (courseId: string) => {
@@ -229,7 +251,10 @@ export default function Frontend() {
         <div className="space-y-8 animate-in fade-in">
           <div className="bg-stone-50 p-4 rounded-xl border border-stone-100 flex justify-between items-center">
             <div>
-              <p className="text-stone-800 font-medium">您好, {member.name}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-stone-800 font-medium">您好, {member.name}</p>
+                <button onClick={handleLogout} className="text-xs text-stone-400 hover:text-stone-600 underline">切換帳號</button>
+              </div>
               <p className="text-xs text-stone-500 mt-1">會員等級：{member.level}</p>
             </div>
             {member.level !== '一般' && (() => {
@@ -281,18 +306,24 @@ export default function Frontend() {
               <section>
                  <h3 className="text-lg text-stone-800 mb-3 flex items-center"><User className="w-5 h-5 mr-2 text-stone-400"/> 再選擇想預約的服務項目(可複選)</h3>
                  <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                   {COURSES.filter(c => !(member.gender === '男' && c.category.includes('女性專屬'))).map(course => (
-                     <div key={course.id} className="p-3 border border-stone-200 rounded-lg hover:border-stone-400 transition cursor-pointer flex justify-between items-center bg-white" onClick={() => addToCart(course.id)}>
+                   {COURSES.filter(c => !(member.gender === '男' && c.category.includes('女性專屬'))).map(course => {
+                    const selectedCount = cart.filter(c => c.courseId === course.id).length;
+                    const isSelected = selectedCount > 0;
+                    return (
+                     <div key={course.id} className={`p-3 border rounded-lg transition cursor-pointer flex justify-between items-center ${isSelected ? 'border-stone-800 bg-stone-50/80 shadow-sm' : 'border-stone-200 hover:border-stone-400 bg-white'}`} onClick={() => addToCart(course.id)}>
                        <div>
                          <p className="text-xs text-stone-400 mb-1">{course.category}</p>
-                         <p className="font-medium text-stone-700">{course.name}</p>
+                         <p className="font-medium text-stone-700 flex items-center gap-2">
+                           {course.name}
+                           {isSelected && <span className="bg-stone-800 text-stone-50 text-[10px] px-2 py-0.5 rounded-full">{selectedCount}</span>}
+                         </p>
                        </div>
                        <div className="text-right">
                          <p className="text-stone-800">NT${course.price}</p>
-                         <p className="text-xs text-stone-400 mt-1">{course.time} 分鐘 <Plus className="w-3 h-3 inline"/></p>
+                         <p className="text-xs text-stone-400 mt-1">{course.time} 分鐘 {isSelected ? <CheckCircle2 className="w-3 h-3 inline text-stone-800" /> : <Plus className="w-3 h-3 inline"/>}</p>
                        </div>
                      </div>
-                   ))}
+                   )})}
                  </div>
               </section>
             </div>
