@@ -1,6 +1,9 @@
+import { firestoreDb } from './firebase';
+import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+
 export type MemberLevel = '一般' | '金卡' | '黑卡';
 export type Gender = '男' | '女';
-export type TherapistPreference = '不指定' | '阿翰' | 'Ricky' | 'Kelly' | 'Kenny' | 'Mark';
+export type TherapistPreference = '不指定按摩師' | '阿翰(男)' | 'Ricky(男)' | 'Kenny(男)' | 'Mark(男)' | '男按摩師即可' | 'Alice(女)' | 'Kelly(女)' | 'Miki(女)' | '女按摩師即可' | '不指定' | '阿翰' | 'Ricky' | 'Kelly' | 'Kenny' | 'Mark' | '男按摩師' | '女按摩師';
 
 export interface Member {
   id: string; // phone is used as ID
@@ -8,7 +11,13 @@ export interface Member {
   birthday: string;
   gender: Gender;
   level: MemberLevel;
+  lineId?: string;
   note?: string;
+  referredBy?: string;
+  referredMonth?: string;
+  primaryTherapist?: string;
+  membershipStartDate?: string;
+  membershipEndDate?: string;
   createdAt: number;
 }
 
@@ -36,6 +45,8 @@ export interface Order {
   finalPrice: number;
   paymentMethod?: string;
   note?: string;
+  isAssignedByShop?: boolean;
+  isConfirmed?: boolean;
   discomfortAreas?: string[];
   createdAt: number;
 }
@@ -43,13 +54,14 @@ export interface Order {
 export const COURSES = [
   { id: 'a1', category: '經絡按摩', name: '全身指壓', time: 30, price: 600, allowUpgrade: false },
   { id: 'a2', category: '芳療升級(悠風)', name: '芳療油推', time: 30, price: 700, allowUpgrade: false },
-  { id: 'a3', category: '芳療升級(晴空)', name: '筋膜刀', time: 30, price: 900, allowUpgrade: false },
+  { id: 'a3', category: '運動按摩(晴空)', name: '筋膜刀', time: 30, price: 900, allowUpgrade: false },
   { id: 'q1', category: '局部舒壓(霧羽)', name: '頭頸指壓', time: 30, price: 600, allowUpgrade: false },
   { id: 'q2', category: '局部舒壓(靜岩)', name: '腰臀指壓', time: 30, price: 600, allowUpgrade: false },
   { id: 'q3', category: '局部舒壓(暖泉)', name: '手部指壓', time: 30, price: 600, allowUpgrade: false },
   { id: 'q4', category: '局部舒壓(行雲)', name: '腿足指壓', time: 30, price: 600, allowUpgrade: false },
   { id: 'l1', category: '女性專屬', name: '櫻綻·豐胸調理', time: 60, price: 1600, allowUpgrade: false },
-  { id: 'l2', category: '女性專屬', name: '月輪·小顏撥筋', time: 60, price: 1600, allowUpgrade: false }
+  { id: 'l2', category: '女性專屬', name: '月輪·小顏撥筋', time: 60, price: 1600, allowUpgrade: false },
+  { id: 'i1', category: '健康量測', name: 'InBody量測與解說', time: 30, price: 200, allowUpgrade: false }
 ];
 
 export const db = {
@@ -67,6 +79,7 @@ export const db = {
     if (idx >= 0) members[idx] = m;
     else members.push(m);
     localStorage.setItem('zf_members', JSON.stringify(members));
+    try { setDoc(doc(firestoreDb, 'members', m.id), m).catch(console.error); } catch(e){}
   },
   
   updateMemberLevel: (id: string, level: MemberLevel) => {
@@ -75,6 +88,7 @@ export const db = {
     if (member) {
       member.level = level;
       localStorage.setItem('zf_members', JSON.stringify(members));
+      try { updateDoc(doc(firestoreDb, 'members', id), { level }).catch(console.error); } catch(e){}
     }
   },
 
@@ -84,27 +98,40 @@ export const db = {
     if (member) {
       member.note = note;
       localStorage.setItem('zf_members', JSON.stringify(members));
+      try { updateDoc(doc(firestoreDb, 'members', id), { note }).catch(console.error); } catch(e){}
     }
   },
 
-  updateMemberInfo: (oldId: string, name: string, gender: Gender, birthday: string, phone: string, level: MemberLevel) => {
+  updateMemberInfo: (oldId: string, name: string, gender: Gender, birthday: string, phone: string, level: MemberLevel, lineId?: string, referredBy?: string, referredMonth?: string, primaryTherapist?: string, membershipStartDate?: string, membershipEndDate?: string) => {
     const members = db.getMembers();
     const idx = members.findIndex(x => x.id === oldId);
     if (idx >= 0) {
-      members[idx].name = name || members[idx].name;
-      members[idx].gender = gender || members[idx].gender;
-      members[idx].birthday = birthday || members[idx].birthday;
-      if (level) members[idx].level = level;
+      const updatedMember = { ...members[idx], name: name || members[idx].name, gender: gender || members[idx].gender, birthday: birthday || members[idx].birthday };
+      if (lineId !== undefined) updatedMember.lineId = lineId;
+      if (level !== undefined) updatedMember.level = level;
+      if (referredBy !== undefined) updatedMember.referredBy = referredBy;
+      if (referredMonth !== undefined) updatedMember.referredMonth = referredMonth;
+      if (primaryTherapist !== undefined) updatedMember.primaryTherapist = primaryTherapist;
+      if (membershipStartDate !== undefined) updatedMember.membershipStartDate = membershipStartDate;
+      if (membershipEndDate !== undefined) updatedMember.membershipEndDate = membershipEndDate;
       if (phone && phone !== oldId) {
-        members[idx].id = phone;
+        updatedMember.id = phone;
         const orders = db.getOrders();
         let changed = false;
         orders.forEach(o => {
-          if (o.memberId === oldId) { o.memberId = phone; changed = true; }
+          if (o.memberId === oldId) { 
+            o.memberId = phone; changed = true; 
+            try { updateDoc(doc(firestoreDb, 'orders', o.id), { memberId: phone }).catch(console.error); } catch(e){}
+          }
         });
         if (changed) localStorage.setItem('zf_orders', JSON.stringify(orders));
+        try { 
+          deleteDoc(doc(firestoreDb, 'members', oldId)).catch(console.error); 
+        } catch(e){}
       }
+      members[idx] = updatedMember;
       localStorage.setItem('zf_members', JSON.stringify(members));
+      try { setDoc(doc(firestoreDb, 'members', updatedMember.id), updatedMember).catch(console.error); } catch(e){}
     }
   },
 
@@ -124,12 +151,14 @@ export const db = {
     const orders = db.getOrders();
     orders.push(o);
     localStorage.setItem('zf_orders', JSON.stringify(orders));
+    try { setDoc(doc(firestoreDb, 'orders', o.id), o).catch(console.error); } catch(e){}
   },
   
   deleteOrder: (id: string) => {
     let orders = db.getOrders();
     orders = orders.filter(o => o.id !== id);
     localStorage.setItem('zf_orders', JSON.stringify(orders));
+    try { deleteDoc(doc(firestoreDb, 'orders', id)).catch(console.error); } catch(e){}
   },
   updateOrder: (id: string, updates: Partial<Order>) => {
     let orders = db.getOrders();
@@ -137,6 +166,7 @@ export const db = {
     if (index !== -1) {
       orders[index] = { ...orders[index], ...updates };
       localStorage.setItem('zf_orders', JSON.stringify(orders));
+      try { updateDoc(doc(firestoreDb, 'orders', id), updates).catch(console.error); } catch(e){}
     }
   }
 };
@@ -155,7 +185,7 @@ export function minsToTime(m: number) {
 
 export function getBookedRanges(date: string, allOrders: Order[]) {
   return allOrders
-      .filter(o => o.date === date)
+      .filter(o => o.date === date && o.status !== 'cancelled')
       .map(o => {
           const start = timeToMins(o.time || '00:00');
           const end = start + (o.totalDuration || 0) + 30; // 30 mins buffer
@@ -163,20 +193,67 @@ export function getBookedRanges(date: string, allOrders: Order[]) {
       });
 }
 
-export function isSlotAvailable(date: string, timeStr: string, requiredDuration: number, allOrders: Order[]) {
+export function sortOrderItems<T extends {name: string, duration?: number, price?: number}>(items: T[]): T[] {
+  const getWeight = (name: string) => {
+    if (name.includes('指壓') || name.includes('豐胸') || name.includes('小顏') || name.includes('局部')) return 1;
+    if (name.includes('油推')) return 2;
+    if (name.includes('筋膜刀')) return 3;
+    if (name.includes('InBody')) return 4;
+    return 5;
+  };
+  return [...items].sort((a, b) => getWeight(a.name) - getWeight(b.name));
+}
+
+export function isSlotAvailable(date: string, timeStr: string, requiredDuration: number, allOrders: Order[], memberId?: string, therapistPref?: string) {
   if (!date || !timeStr) return false;
   const startMins = timeToMins(timeStr);
-  const endMins = startMins + requiredDuration + 30; 
-  const booked = getBookedRanges(date, allOrders);
+
+  const today = new Date();
+  const slotDateObj = new Date(date);
   
+  if (
+    today.getFullYear() === slotDateObj.getFullYear() &&
+    today.getMonth() === slotDateObj.getMonth() &&
+    today.getDate() === slotDateObj.getDate()
+  ) {
+    const currentMins = today.getHours() * 60 + today.getMinutes();
+    if (startMins < currentMins + 60) {
+      return false;
+    }
+  }
+
+  const finishMins = startMins + requiredDuration;
+  if (finishMins > (22 * 60)) return false; // Ensure service ends by 22:00
+  
+  const endMins = startMins + requiredDuration + 30; // +30 for the overlap check buffer
+  
+  // Get existing overlapping orders
+  const intersectingOrders = allOrders.filter(o => o.date === date && o.status !== 'cancelled').map(o => {
+    return {
+      order: o,
+      start: timeToMins(o.time || '00:00'),
+      end: timeToMins(o.time || '00:00') + (o.totalDuration || 0) + 30
+    }
+  });
+
   for (let m = startMins; m < endMins; m += 30) {
       let overlaps = 0;
-      for (const b of booked) {
+      let hasSameMember = false;
+      let hasSameTherapist = false;
+
+      for (const b of intersectingOrders) {
           if (m >= b.start && m < b.end) {
               overlaps++;
+              if (memberId && b.order.memberId === memberId) {
+                  hasSameMember = true;
+              }
+              if (therapistPref && therapistPref !== '不指定按摩師' && b.order.therapistPreference === therapistPref) {
+                  hasSameTherapist = true;
+              }
           }
       }
-      if (overlaps >= 3) {
+      
+      if (overlaps >= 5 || hasSameMember || hasSameTherapist) {
           return false;
       }
   }
@@ -190,35 +267,59 @@ for (let h = 10; h <= 21; h++) {
 }
 
 export function getDiscountStatus(member: Member, orderDateStr: string, allOrders: Order[]) {
-    if (!member || !member.level || member.level === '一般') return { maxTimes: 0, usedTimes: 0, isUsedUp: true };
+    if (!member || !member.level || member.level === '一般') return { maxTimes: 0, usedTimes: 0, isUsedUp: true, inbodyMaxTimes: 0, inbodyUsedTimes: 0, inbodyIsUsedUp: true };
     const maxTimes = member.level === '金卡' ? 1 : 4;
+    const inbodyMaxTimes = member.level === '金卡' ? 1 : 4;
     const orderMonth = orderDateStr ? orderDateStr.substring(0, 7) : new Date().toISOString().substring(0, 7);
-    const usedTimes = allOrders.filter(o => 
-      o.memberId === member.id && 
-      o.discountAmount > 0 && 
-      (o.date?.substring(0, 7) === orderMonth)
-    ).length;
+    
+    let usedTimes = 0;
+    let inbodyUsedTimes = 0;
+    
+    allOrders.forEach(o => {
+      if (o.memberId === member.id && o.status !== 'cancelled' && (o.date?.substring(0, 7) === orderMonth)) {
+         if (o.discountAmount > 0) {
+             const hasMassageDiscount = o.discountFormula ? o.discountFormula.includes('1200') : true;
+             const hasInBodyDiscount = o.discountFormula ? o.discountFormula.includes('InBody') : false;
+             
+             if (hasMassageDiscount && (!o.discountFormula || !o.discountFormula.includes('InBody') || o.discountAmount > 200)) usedTimes++;
+             if (hasInBodyDiscount) inbodyUsedTimes++;
+         }
+      }
+    });
+
     return {
         maxTimes,
         usedTimes,
-        isUsedUp: usedTimes >= maxTimes
+        isUsedUp: usedTimes >= maxTimes,
+        inbodyMaxTimes,
+        inbodyUsedTimes,
+        inbodyIsUsedUp: inbodyUsedTimes >= inbodyMaxTimes
     };
 }
 
-export function calculateDiscount(member: Member, orderDateStr: string, allOrders: Order[], currentItems: {duration: number, price: number}[]): { discount: number, formulaExp: string } {
+export function calculateDiscount(member: Member, orderDateStr: string, allOrders: Order[], currentItems: {name: string, duration: number, price: number}[]): { discount: number, formulaExp: string } {
   if (!member) return { discount: 0, formulaExp: '' };
   
   const effectiveDate = orderDateStr || new Date().toISOString().substring(0, 10);
   const status = getDiscountStatus(member, effectiveDate, allOrders);
-  if (status.isUsedUp) return { discount: 0, formulaExp: '' };
 
-  const originalPrice = currentItems.reduce((sum, item) => sum + item.price, 0);
+  const hasInBody = currentItems.some(i => i.name === 'InBody量測與解說');
+  const massageItems = currentItems.filter(i => i.name !== 'InBody量測與解說');
 
-  if (originalPrice > 1200) {
-    const rest = originalPrice - 1200;
-    const discount = rest / 2;
-    return { discount, formulaExp: `1200 + ${rest} ÷ 2` };
+  const massagePrice = massageItems.reduce((sum, item) => sum + item.price, 0);
+  let discount = 0;
+  let formulaParts = [];
+
+  if (!status.isUsedUp && massagePrice > 1200) {
+    const rest = massagePrice - 1200;
+    discount += rest / 2;
+    formulaParts.push(`首時(1200)+[(${massagePrice}-1200)*50%](半價)`);
   }
 
-  return { discount: 0, formulaExp: '' };
+  if (hasInBody && !status.inbodyIsUsedUp) {
+    discount += 200;
+    formulaParts.push(`InBody免費`);
+  }
+
+  return { discount, formulaExp: formulaParts.join(' , ') };
 }
