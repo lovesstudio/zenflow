@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "Member": {
+      "title": "Member",
+      "description": "Represents a customer member in the system.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Phone number used as ID" },
+        "name": { "type": "string" },
+        "birthday": { "type": "string" },
+        "gender": { "type": "string", "enum": ["男", "女"] },
+        "level": { "type": "string", "enum": ["一般", "金卡", "黑卡"] },
+        "lineId": { "type": "string" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "birthday", "gender", "level", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Represents a booking or reservation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "memberId": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "cancelled"] },
+        "therapistPreference": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/entities/OrderItem" }
+        },
+        "totalDuration": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "discountFormula": { "type": "string" },
+        "finalPrice": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "note": { "type": "string" },
+        "isAssignedByShop": { "type": "boolean" },
+        "isConfirmed": { "type": "boolean" },
+        "discomfortAreas": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "memberId", "date", "time", "therapistPreference", "items", "totalDuration", "originalPrice", "discountAmount", "finalPrice", "createdAt"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "An item inside an order.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "duration": { "type": "number" },
+        "isUpgrade": { "type": "boolean" }
+      },
+      "required": ["id", "courseId", "name", "price", "duration"]
+    }
+  },
+  "firestore": {
+    "/members/{memberId}": {
+      "schema": "Member",
+      "description": "Stores user profiles."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Stores reservations."
+    }
+  }
+}
