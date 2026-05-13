@@ -81,7 +81,26 @@ export default function Backend() {
 
   const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm?: () => void} | null>(null);
   const [showFormulaIds, setShowFormulaIds] = useState<Set<string>>(new Set());
+  const [expandedTherapists, setExpandedTherapists] = useState<Set<string>>(new Set());
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
 
+  const toggleTherapistExpand = (name: string) => {
+    setExpandedTherapists(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleOrderExpand = (id: string) => {
+    setExpandedOrderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const toggleFormula = (id: string) => {
     setShowFormulaIds(prev => {
       const next = new Set(prev);
@@ -201,20 +220,37 @@ export default function Backend() {
   // Polling to simulate real-time updates from LocalStorage
   useEffect(() => {
     const fetchData = () => {
-      setOrders(db.getOrders().sort((a,b) => b.createdAt - a.createdAt));
-      // Use setMembers sparingly to avoid losing local focus/state
+      const freshOrders = db.getOrders().sort((a,b) => b.createdAt - a.createdAt);
+      setOrders(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(freshOrders)) return prev;
+        return freshOrders;
+      });
+
       const freshMembers = db.getMembers().sort((a,b) => (b.createdAt - a.createdAt) || b.id.localeCompare(a.id));
       setMembers(prev => {
-        // Deep compare or simple length/first item check to avoid unnecessary re-renders
         if (JSON.stringify(prev) === JSON.stringify(freshMembers)) return prev;
         return freshMembers;
       });
-      setAvailabilities(db.getAvailability());
+
+      const freshAvail = db.getAvailability();
+      setAvailabilities(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(freshAvail)) return prev;
+        return freshAvail;
+      });
     };
     fetchData();
-    const interval = setInterval(fetchData, 2000); // Relaxed polling to reduce CPU/flicker
+    const interval = setInterval(fetchData, 2000); 
     return () => clearInterval(interval);
   }, []);
+
+  // Body scroll lock
+  useEffect(() => {
+    if (editingAvailability || viewingAppts || bonusModal || confirmAction || reschedulingId) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+  }, [editingAvailability, viewingAppts, bonusModal, confirmAction, reschedulingId]);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const filterDateStr = todayStr; // Simplified for now, could add date picker
@@ -429,30 +465,50 @@ export default function Backend() {
 
   return (
     <div className="bg-stone-50 min-h-screen text-stone-800 font-sans">
-      <div className="bg-stone-900 text-stone-100 px-6 py-4 flex justify-between items-center shadow-md">
-        <h1 className="text-xl font-light tracking-wide">
-          ZEN FLOW 
-          <span className="text-stone-400 text-sm ml-2 hidden sm:inline">
-            {isAdmin ? '管理後台' : `${authedUser.name || '師傅'} 老師`}
-          </span>
-        </h1>
-        <div className="space-x-1 flex items-center overflow-x-auto no-scrollbar">
+      <div className="bg-stone-900 text-stone-100 px-6 py-4 flex flex-col items-center shadow-md gap-3">
+        <div className="w-full flex justify-between items-center border-b border-stone-800 pb-2 mb-1">
+          <h1 className="text-xl font-black tracking-tighter">
+            ZEN FLOW 
+            <span className="text-stone-500 text-[10px] ml-2 font-bold uppercase tracking-widest md:inline hidden">
+              {isAdmin ? 'Management Center' : `${authedUser.name || 'Therapist'} Control`}
+            </span>
+          </h1>
+          <div className="flex items-center gap-2">
+            {!isAdmin && <span className="text-stone-400 text-xs font-medium mr-2">{authedUser.name} 老師</span>}
+            <button onClick={handleLogout} className="p-2 text-stone-500 hover:text-white transition bg-white/5 rounded-lg">
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        
+        <div className="w-full flex items-center justify-center md:justify-start gap-1 overflow-x-auto no-scrollbar pb-1">
           {isAdmin && (
-            <>
-              <button onClick={()=>setTab('calendar')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='calendar'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>預約列表</button>
-              <button onClick={()=>setTab('orders')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='orders'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>訂單管理</button>
-              <button onClick={()=>setTab('members')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='members'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>會員系統</button>
-            </>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={()=>setTab('calendar')} 
+                className={`w-[75px] h-9 flex items-center justify-center rounded-lg text-[13px] transition whitespace-nowrap font-bold shrink-0 ${tab==='calendar'?'bg-stone-100 text-stone-900 shadow-xl':'text-stone-500 hover:text-stone-200'}`}
+              >
+                預約列表
+              </button>
+              <button 
+                onClick={()=>setTab('orders')} 
+                className={`w-[75px] h-9 flex items-center justify-center rounded-lg text-[13px] transition whitespace-nowrap font-bold shrink-0 ${tab==='orders'?'bg-stone-100 text-stone-900 shadow-xl':'text-stone-500 hover:text-stone-200'}`}
+              >
+                訂單管理
+              </button>
+              <button 
+                onClick={()=>setTab('members')} 
+                className={`w-[75px] h-9 flex items-center justify-center rounded-lg text-[13px] transition whitespace-nowrap font-bold shrink-0 ${tab==='members'?'bg-stone-100 text-stone-900 shadow-xl':'text-stone-500 hover:text-stone-200'}`}
+              >
+                會員系統
+              </button>
+            </div>
           )}
           <button 
             onClick={() => { if(isAdmin) setTab('therapist'); }} 
-            className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='therapist' ? 'bg-emerald-600 text-white' : 'text-stone-400 hover:text-white'}`}
+            className={`w-[75px] h-9 flex items-center justify-center rounded-lg text-[13px] transition whitespace-nowrap font-bold shrink-0 ${tab==='therapist' ? 'bg-emerald-500 text-white shadow-lg' : 'text-stone-500 hover:text-stone-200'}`}
           >
-            {isAdmin ? '師傅專區' : `${authedUser?.name || '師傅'} 的專屬分頁`}
-          </button>
-          <button onClick={handleLogout} className="ml-2 px-3 py-2 text-stone-400 hover:text-white transition flex items-center shrink-0">
-            <LogOut className="w-4 h-4 mr-1 md:hidden" />
-            <span className="hidden md:inline">登出</span>
+            {isAdmin ? '師傅專區' : '排班管理'}
           </button>
         </div>
       </div>
@@ -461,32 +517,38 @@ export default function Backend() {
         {tab === 'calendar' && (
           <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden p-6">
             {isAdmin && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-                  <div className="p-3 bg-green-100 text-green-700 rounded-lg mr-4"><DollarSign className="w-6 h-6"/></div>
-                  <div><p className="text-stone-500 text-sm">今日營業額</p><p className="text-2xl font-semibold">NT$ {todaysRevenue}</p></div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 mb-6">
+                <div className="bg-white p-3 md:p-4 rounded-xl border border-stone-200 shadow-sm flex items-center gap-3">
+                  <div className="p-2 md:p-3 bg-green-50 text-green-700 rounded-lg shrink-0"><DollarSign className="w-3.5 h-3.5 md:w-5 md:h-5"/></div>
+                  <div className="flex flex-col">
+                    <p className="text-stone-400 text-[11px] uppercase font-bold tracking-wider leading-none mb-1">今日營業額</p>
+                    <p className="text-sm md:text-lg font-bold text-stone-800 leading-none">NT$ {todaysRevenue}</p>
+                  </div>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-                  <div className="p-3 bg-blue-100 text-blue-700 rounded-lg mr-4"><Calendar className="w-6 h-6"/></div>
-                  <div><p className="text-stone-500 text-sm">今日訂單數</p><p className="text-2xl font-semibold">{todaysOrders.length} 筆</p></div>
+                <div className="bg-white p-3 md:p-4 rounded-xl border border-stone-200 shadow-sm flex items-center gap-3">
+                  <div className="p-2 md:p-3 bg-blue-50 text-blue-700 rounded-lg shrink-0"><Calendar className="w-3.5 h-3.5 md:w-5 md:h-5"/></div>
+                  <div className="flex flex-col">
+                    <p className="text-stone-400 text-[11px] uppercase font-bold tracking-wider leading-none mb-1">今日訂單數</p>
+                    <p className="text-sm md:text-lg font-bold text-stone-800 leading-none">{todaysOrders.length} 筆</p>
+                  </div>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-                  <div className="p-3 bg-purple-100 text-purple-700 rounded-lg mr-4"><TrendingUp className="w-6 h-6"/></div>
-                  <div><p className="text-stone-500 text-sm">累計總訂單</p><p className="text-2xl font-semibold">{orders.length} 筆</p></div>
+                <div className="bg-white p-3 md:p-4 rounded-xl border border-stone-200 shadow-sm flex items-center gap-3">
+                  <div className="p-2 md:p-3 bg-purple-50 text-purple-700 rounded-lg shrink-0"><TrendingUp className="w-3.5 h-3.5 md:w-5 md:h-5"/></div>
+                  <div className="flex flex-col">
+                    <p className="text-stone-400 text-[11px] uppercase font-bold tracking-wider leading-none mb-1">累計總訂單</p>
+                    <p className="text-sm md:text-lg font-bold text-stone-800 leading-none">{orders.length} 筆</p>
+                  </div>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-                  <div className="p-3 bg-amber-100 text-amber-700 rounded-lg mr-4"><Users className="w-6 h-6"/></div>
-                  <div><p className="text-stone-500 text-sm">總會員數</p><p className="text-2xl font-semibold">{members.length} 人</p></div>
+                <div className="bg-white p-3 md:p-4 rounded-xl border border-stone-200 shadow-sm flex items-center gap-3">
+                  <div className="p-2 md:p-3 bg-amber-50 text-amber-700 rounded-lg shrink-0"><Users className="w-3.5 h-3.5 md:w-5 md:h-5"/></div>
+                  <div className="flex flex-col">
+                    <p className="text-stone-400 text-[11px] uppercase font-bold tracking-wider leading-none mb-1">總會員數</p>
+                    <p className="text-sm md:text-lg font-bold text-stone-800 leading-none">{members.length} 人</p>
+                  </div>
                 </div>
               </div>
             )}
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="font-medium text-stone-800 text-lg flex items-center">
-                <Calendar className="w-5 h-5 mr-2" /> 預約列表 (即將到來)
-              </h2>
-            </div>
-            
-            <div className="space-y-6">
+            <div className="space-y-4">
               {ALL_THERAPIST_CATEGORIES.map(category => {
                 const categoryOrders = orders.filter(o => 
                   o.date >= todayStr && 
@@ -496,185 +558,191 @@ export default function Backend() {
                     : o.therapistPreference === category)
                 ).sort((a,b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
 
+                const isExpanded = expandedTherapists.has(category);
+
                 return (
-                  <div key={category} className="border border-stone-100 rounded-xl p-4 bg-stone-50/50">
-                    <h3 className="font-medium text-stone-700 mb-3 ml-2 border-l-2 border-stone-800 pl-2">{category}</h3>
-                    {categoryOrders.length === 0 ? (
-                      <p className="text-sm text-stone-400 pl-4 py-2">目前沒有安排在這個分類的預約</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {categoryOrders.map(o => {
-                          const m = members.find(x => x.id === o.memberId);
-                          const endTime = o.time && o.totalDuration ? minsToTime(timeToMins(o.time) + o.totalDuration) : '';
-                          return (
-                            <div key={o.id} className={`bg-white p-4 rounded-lg border shadow-sm flex flex-col hover:border-stone-400 transition ${o.status === 'completed' ? 'opacity-50 border-stone-100' : 'border-stone-200'}`}>
-                              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                                <div className="flex items-start space-x-4 w-full md:w-auto">
-                                  <div className="flex flex-col space-y-2 shrink-0">
-                                    <span className="bg-stone-800 text-stone-50 px-2 py-1 rounded text-sm font-medium text-center">
-                                      {o.date.replace(/-/g, '/')}
-                                    </span>
-                                    <div className="bg-stone-100 text-stone-700 px-2 py-1 rounded text-sm text-center font-medium flex flex-col justify-center">
-                                      <span>{o.time}~{endTime}</span>
-                                      <span className="text-xs text-stone-500 font-normal mt-0.5">(總共{(o.totalDuration / 60) % 1 === 0 ? o.totalDuration/60 : (o.totalDuration/60).toFixed(1)}小時)</span>
-                                    </div>
-                                    
-                                    <div className="mt-2 flex flex-col sm:flex-row gap-2">
-                                      {category === '不指定按摩師' && (
-                                        <div className="text-[10px] flex flex-col space-y-1 bg-amber-50 p-1.5 rounded border border-amber-200 min-w-[100px] shrink-0">
-                                          <span className="text-amber-800 font-medium">分派給：</span>
-                                          <select 
-                                            className="bg-white border border-amber-200 outline-none rounded p-0.5 text-stone-700 cursor-pointer shadow-sm w-full"
-                                            onChange={(e) => {
-                                              if (e.target.value) {
-                                                db.updateOrder(o.id, { therapistPreference: e.target.value as any, isAssignedByShop: true });
-                                                setOrders(db.getOrders());
-                                              }
-                                            }}
-                                            value=""
-                                          >
-                                            <option value="" disabled>選擇安排</option>
-                                            {THERAPISTS_W_GENDER.map(t => (
-                                              <option key={t} value={t}>{t}</option>
-                                            ))}
-                                          </select>
+                  <div key={category} className="border border-stone-200 rounded-xl overflow-hidden bg-white shadow-sm transition-all duration-300">
+                    <button 
+                        onClick={() => toggleTherapistExpand(category)}
+                        className={`w-full flex items-center justify-between py-2.5 px-4 text-left transition-colors ${isExpanded ? 'bg-stone-50' : 'hover:bg-stone-50/50'}`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-1.5 h-1.5 rounded-full bg-stone-800/40"></div>
+                            <span className="font-bold text-stone-800 text-sm tracking-tight">{category}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${categoryOrders.length > 0 ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-400'}`}>
+                                {categoryOrders.length} 筆
+                            </span>
+                        </div>
+                        <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`} />
+                    </button>
+                    
+                    <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-[5000px] opacity-100 border-t border-stone-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="p-4 space-y-3 bg-stone-50/30">
+                            {categoryOrders.length === 0 ? (
+                                <p className="text-xs text-stone-400 py-6 text-center italic">目前沒有安排在這個分類的預約</p>
+                            ) : (
+                                categoryOrders.map(o => {
+                                    const m = members.find(x => x.id === o.memberId);
+                                    const endTime = o.time && o.totalDuration ? minsToTime(timeToMins(o.time) + o.totalDuration) : '';
+                                    return (
+                                        <div key={o.id} className={`bg-white p-4 rounded-xl border shadow-sm flex flex-col hover:border-stone-400 transition-all ${o.status === 'completed' ? 'opacity-50 grayscale border-stone-100' : 'border-stone-200'}`}>
+                                          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                                            <div className="flex items-start gap-4">
+                                              <div className="flex flex-col gap-2 shrink-0">
+                                                <div className="bg-stone-800 text-stone-50 px-2 py-1 rounded-lg text-[11px] font-bold text-center">
+                                                  {o.date.replace(/-/g, '/')}
+                                                </div>
+                                                <div className="bg-stone-100 text-stone-700 px-2 py-1.5 rounded-lg text-xs text-center font-bold flex flex-col justify-center border border-stone-200">
+                                                  <span>{o.time}~{endTime}</span>
+                                                  <span className="text-[10px] text-stone-400 font-normal mt-0.5">({o.totalDuration}分)</span>
+                                                </div>
+                                                
+                                                <div className="mt-1 flex flex-col gap-1.5">
+                                                  {category === '不指定按摩師' && (
+                                                    <div className="text-[10px] flex flex-col gap-1 bg-amber-50 p-1.5 rounded-lg border border-amber-200">
+                                                      <span className="text-amber-800 font-bold">分派：</span>
+                                                      <select 
+                                                        className="bg-white border border-amber-200 outline-none rounded p-1 text-stone-700 cursor-pointer shadow-sm text-[10px] w-full"
+                                                        onChange={(e) => {
+                                                          if (e.target.value) {
+                                                            db.updateOrder(o.id, { therapistPreference: e.target.value as any, isAssignedByShop: true });
+                                                            setOrders(db.getOrders());
+                                                          }
+                                                        }}
+                                                        value=""
+                                                      >
+                                                        <option value="" disabled>選擇安排</option>
+                                                        {THERAPISTS_W_GENDER.map(t => (
+                                                          <option key={t} value={t}>{t}</option>
+                                                        ))}
+                                                      </select>
+                                                    </div>
+                                                  )}
+                                                  
+                                                  {category !== '不指定按摩師' && (!o.status || o.status === 'pending') && (
+                                                    <div className="text-[10px] flex flex-col gap-1 bg-stone-50 p-1.5 rounded-lg border border-stone-200">
+                                                      <span className="text-stone-600 font-bold">代班：</span>
+                                                      <select 
+                                                        className="bg-white border border-stone-200 outline-none rounded p-1 text-stone-700 cursor-pointer shadow-sm text-[10px] w-full"
+                                                        onChange={(e) => {
+                                                          if (e.target.value) {
+                                                            db.updateOrder(o.id, { therapistPreference: e.target.value as any });
+                                                            setOrders(db.getOrders());
+                                                          }
+                                                        }}
+                                                        value=""
+                                                      >
+                                                        <option value="" disabled>代班..</option>
+                                                        {THERAPISTS_W_GENDER.map(t => (
+                                                          t !== category && <option key={t} value={t}>{t}</option>
+                                                        ))}
+                                                      </select>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                  <p className="text-base font-bold text-stone-800 cursor-pointer hover:underline truncate" onClick={() => openCustomerModal(m)}>
+                                                    {m?.name || '未知客戶'}
+                                                  </p>
+                                                  <span className="text-stone-400 text-xs font-mono">{o.memberId}</span>
+                                                  {o.isAssignedByShop && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">店家分派</span>}
+                                                </div>
+
+                                                <div className="space-y-1.5 mb-3">
+                                                  {sortOrderItems(o.items).map((i, idx) => (
+                                                    <p key={idx} className="flex items-center text-xs text-stone-600 font-medium">
+                                                      <Plus className="w-2.5 h-2.5 mr-2 text-stone-400" />
+                                                      {i.name} ({i.duration}分)
+                                                    </p>
+                                                  ))}
+                                                </div>
+
+                                                <textarea
+                                                  className="w-full text-[11px] p-2 border border-stone-200 rounded-lg resize-none focus:outline-none focus:border-stone-500 bg-stone-50/50 placeholder:text-stone-300 text-stone-700 h-14 transition-all"
+                                                  placeholder="服務注意事項..."
+                                                  defaultValue={o.note || ''}
+                                                  onBlur={(e) => {
+                                                    if (e.target.value !== o.note) {
+                                                      db.updateOrder(o.id, { note: e.target.value });
+                                                      setOrders(db.getOrders());
+                                                    }
+                                                  }}
+                                                />
+                                              </div>
+                                            </div>
+
+                                            <div className="lg:ml-4 flex flex-col justify-between items-start lg:items-end gap-3 shrink-0">
+                                              <div className="flex items-center gap-3 w-full lg:w-auto justify-between">
+                                                <p className="text-lg font-black text-stone-900">NT$ {o.finalPrice}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                  {o.status === 'completed' && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">已完成</span>}
+                                                  {o.status === 'cancelled' && <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">已取消</span>}
+                                                  {o.isConfirmed && (!o.status || o.status === 'pending') && <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold border border-blue-100">出席確認</span>}
+                                                </div>
+                                              </div>
+
+                                              <div className="flex flex-wrap gap-2 w-full lg:w-auto justify-end">
+                                                  {(!o.status || o.status === 'pending') && (
+                                                    <>
+                                                      {!o.isConfirmed && (
+                                                        <button onClick={() => {
+                                                            db.updateOrder(o.id, { isConfirmed: true });
+                                                            setOrders(db.getOrders());
+                                                          }} className="text-[11px] px-3 py-2 bg-stone-800 text-white font-bold rounded-lg hover:bg-stone-700 transition active:scale-95 shadow-sm">
+                                                          出席確認
+                                                        </button>
+                                                      )}
+                                                      <button onClick={() => {
+                                                        setRescheduleDate(o.date);
+                                                        setRescheduleTime(o.time);
+                                                        setReschedulingId(o.id);
+                                                      }} className="text-[11px] px-3 py-2 border border-stone-200 bg-white text-stone-700 font-bold rounded-lg hover:bg-stone-50 transition active:scale-95 shadow-sm flex items-center">
+                                                        <CalendarDays className="w-3.5 h-3.5 mr-1 text-stone-400" />
+                                                        改期
+                                                      </button>
+                                                      <button onClick={() => handleCompleteOrder(o.id)} className="text-[11px] px-3 py-2 border border-stone-200 bg-white text-stone-700 font-bold rounded-lg hover:bg-stone-50 transition active:scale-95 shadow-sm flex items-center">
+                                                        <CheckCircle className="w-3.5 h-3.5 mr-1 text-stone-400" />
+                                                        完成服務
+                                                      </button>
+                                                      <button onClick={() => handleShare(o)} className="text-[11px] px-3 py-2 border border-stone-200 bg-white text-stone-700 font-bold rounded-lg hover:bg-stone-50 transition active:scale-95 shadow-sm">
+                                                        分享
+                                                      </button>
+                                                      <button onClick={() => handleCancelOrder(o.id)} className="w-full lg:w-auto text-[10px] py-1 text-stone-400 hover:text-red-500 font-bold transition">
+                                                        取消預約
+                                                      </button>
+                                                    </>
+                                                  )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="mt-3 pt-3 border-t border-stone-100 flex flex-wrap items-center gap-3">
+                                              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">不適部位：</span>
+                                              <div className="flex flex-wrap gap-2">
+                                                {['頭','頸','肩','上背','下背','臀','大腿','小腿','足','胸','腹','手'].map(area => (
+                                                  <label key={area} className={`flex items-center px-1.5 py-0.5 rounded cursor-pointer transition-colors border ${o.discomfortAreas?.includes(area) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-400 border-stone-100 hover:border-stone-200'}`}>
+                                                    <input 
+                                                      type="checkbox" 
+                                                      checked={o.discomfortAreas?.includes(area) || false} 
+                                                      onChange={e => {
+                                                        const current = o.discomfortAreas || [];
+                                                        db.updateOrder(o.id, { discomfortAreas: e.target.checked ? [...current, area] : current.filter(x => x !== area) });
+                                                        setOrders(db.getOrders());
+                                                      }}
+                                                      className="hidden" 
+                                                    />
+                                                    <span className="text-[10px] font-bold">{area}</span>
+                                                  </label>
+                                                ))}
+                                              </div>
+                                          </div>
                                         </div>
-                                      )}
-                                      
-                                      {category !== '不指定按摩師' && (!o.status || o.status === 'pending') && (
-                                        <div className="text-[10px] flex flex-col space-y-1 bg-stone-50 p-1.5 rounded border border-stone-200 min-w-[100px] shrink-0">
-                                          <span className="text-stone-600 font-medium whitespace-nowrap">改由：</span>
-                                          <select 
-                                            className="bg-white border border-stone-200 outline-none rounded p-0.5 text-stone-700 cursor-pointer shadow-sm w-full"
-                                            onChange={(e) => {
-                                              if (e.target.value) {
-                                                db.updateOrder(o.id, { therapistPreference: e.target.value as any });
-                                                setOrders(db.getOrders());
-                                              }
-                                            }}
-                                            value=""
-                                          >
-                                            <option value="" disabled>選擇代班</option>
-                                            {THERAPISTS_W_GENDER.map(t => (
-                                              t !== category && <option key={t} value={t}>{t} 代班</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                      )}
-                                      
-                                      <textarea
-                                        className="flex-1 text-[11px] p-2 border border-stone-200 rounded resize-none focus:outline-none focus:border-stone-500 bg-white placeholder:text-stone-300 text-stone-700 h-[52px] shadow-sm"
-                                        placeholder="當日服務注意事項..."
-                                        rows={2}
-                                        defaultValue={o.note || ''}
-                                        onBlur={(e) => {
-                                          if (e.target.value !== o.note) {
-                                            db.updateOrder(o.id, { note: e.target.value });
-                                            setOrders(db.getOrders());
-                                          }
-                                        }}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="mt-1">
-                                    <div className="flex items-center space-x-3 mb-2 flex-wrap gap-y-2">
-                                      <p className="text-base font-medium text-stone-800 cursor-pointer hover:underline" onClick={() => openCustomerModal(m)}>
-                                        {m?.name || '未知顧客'} <span className="text-stone-400 text-sm font-normal ml-1">{o.memberId}</span>
-                                      </p>
-                                      {o.isAssignedByShop && (
-                                        <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded border border-stone-200">
-                                          店家分派
-                                        </span>
-                                      )}
-                                      <button onClick={() => handleShare(o)} className="text-xs text-stone-500 hover:text-stone-800 border border-stone-200 px-2 py-0.5 rounded flex items-center transition bg-white shadow-sm">
-                                        複製預約資訊
-                                      </button>
-                                    </div>
-                                    <div className="text-sm text-stone-600 space-y-1 mt-3">
-                                      {sortOrderItems(o.items).map((i, idx) => (
-                                        <p key={idx} className="flex items-center">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-stone-400 mr-2"></span>
-                                          {i.name} ({i.duration} 分鐘)
-                                        </p>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="mt-3 md:mt-1 pt-3 md:pt-0 border-t border-stone-100 md:border-t-0 flex flex-col justify-between items-start md:items-end w-full md:w-auto h-full shrink-0">
-                                  <div className="flex w-full md:w-auto justify-between md:justify-end items-center md:items-end md:flex-col gap-2">
-                                    <div className="flex flex-wrap gap-2">
-                                      {o.status === 'completed' && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded inline-block">已完成</span>}
-                                      {o.status === 'cancelled' && <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded inline-block">已取消</span>}
-                                      {o.isConfirmed && (!o.status || o.status === 'pending') && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded inline-block border border-blue-100">已確認出席</span>}
-                                    </div>
-                                    <p className="text-sm font-medium text-stone-800">NT$ {o.finalPrice}</p>
-                                  </div>
-                                  <div className="mt-4 flex flex-col items-start md:items-end w-full md:w-auto space-y-2">
-                                    {(!o.status || o.status === 'pending') && (
-                                      <>
-                                        <div className="flex flex-wrap gap-2 justify-start md:justify-end w-full">
-                                          {!o.isConfirmed && (
-                                            <button onClick={() => {
-                                                db.updateOrder(o.id, { isConfirmed: true });
-                                                setOrders(db.getOrders());
-                                              }} className="text-xs px-3 py-1.5 border border-stone-200 bg-white text-stone-800 font-medium shadow-sm rounded-lg hover:bg-stone-50 flex items-center whitespace-nowrap transition">
-                                              確認出席
-                                            </button>
-                                          )}
-                                          <button onClick={() => {
-                                            setRescheduleDate(o.date);
-                                            setRescheduleTime(o.time);
-                                            setReschedulingId(o.id);
-                                          }} className="text-xs px-3 py-1.5 border border-stone-200 bg-white text-stone-800 font-medium shadow-sm rounded-lg hover:bg-stone-50 flex items-center whitespace-nowrap transition">
-                                            <CalendarDays className="w-3 h-3 mr-1 text-stone-500" />
-                                            改期
-                                          </button>
-                                          <button onClick={() => handleCompleteOrder(o.id)} className="text-xs px-3 py-1.5 border border-stone-200 bg-white text-stone-800 font-medium shadow-sm rounded-lg hover:bg-stone-50 flex items-center whitespace-nowrap transition">
-                                            <CheckCircle className="w-3 h-3 mr-1 text-stone-500" />
-                                            完成服務
-                                          </button>
-                                        </div>
-                                        <button onClick={() => handleCancelOrder(o.id)} className="text-xs px-3 py-1 text-stone-400 hover:text-red-600 rounded flex items-center transition mt-1">
-                                          取消預約
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="mt-2 pt-2 border-t border-stone-100">
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                  <label className="text-[11px] text-stone-400 mb-0 uppercase tracking-wider whitespace-nowrap">今日不適部位：</label>
-                                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                    {['頭','頸','肩','上背','下背','臀','大腿','小腿','足','胸','腹','手'].map(area => (
-                                      <label key={area} className="flex items-center text-[12px] text-stone-800 cursor-pointer hover:bg-stone-100 px-1 rounded transition whitespace-nowrap">
-                                        <input 
-                                          type="checkbox" 
-                                          checked={o.discomfortAreas?.includes(area) || false} 
-                                          onChange={e => {
-                                            const current = o.discomfortAreas || [];
-                                            let updated = [];
-                                            if (e.target.checked) {
-                                              updated = [...current, area];
-                                            } else {
-                                              updated = current.filter(x => x !== area);
-                                            }
-                                            db.updateOrder(o.id, { discomfortAreas: updated });
-                                            setOrders(db.getOrders());
-                                          }}
-                                          className="w-3.5 h-3.5 mr-1 accent-stone-800" 
-                                        />
-                                        {area}
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
                   </div>
                 );
               })}
@@ -686,10 +754,10 @@ export default function Backend() {
           <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-stone-200 flex flex-col md:flex-row md:justify-between md:items-center bg-stone-50 gap-4">
               <div className="flex items-center gap-4">
-                <h2 className="font-medium text-stone-800">所有預約紀錄</h2>
+                <h2 className="text-[14px] font-bold text-stone-800">所有預約紀錄</h2>
                 <div className="flex bg-stone-200/50 p-1 rounded-lg">
-                  <button onClick={() => setOrderViewMode('list')} className={`px-3 py-1 text-xs rounded transition ${orderViewMode === 'list' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>時間排序</button>
-                  <button onClick={() => setOrderViewMode('byTherapist')} className={`px-3 py-1 text-xs rounded transition ${orderViewMode === 'byTherapist' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>按摩師統計</button>
+                  <button onClick={() => setOrderViewMode('list')} className={`px-3 py-1 text-[11.5px] rounded transition ${orderViewMode === 'list' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>時間排序</button>
+                  <button onClick={() => setOrderViewMode('byTherapist')} className={`px-3 py-1 text-[11.5px] rounded transition ${orderViewMode === 'byTherapist' ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>按摩師統計</button>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -699,137 +767,175 @@ export default function Backend() {
                   onChange={e => setOrderMonth(e.target.value)} 
                   className="px-2 py-1 text-sm border border-stone-200 rounded outline-none"
                 />
-                <span className="text-xs text-stone-500 flex items-center hidden md:flex"><Clock className="w-3 h-3 mr-1"/> 每秒自動更新 (儲存於本機)</span>
+                <span className="text-xs text-stone-500 flex items-center hidden md:flex"><Clock className="w-3 h-3 mr-1"/> 每秒自動更新</span>
               </div>
             </div>
             
             {orderViewMode === 'list' && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm min-w-[1000px]">
-                  <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
-                    <tr>
-                      <th className="pl-6 pr-2 py-3 font-medium w-[60px] text-center">完成</th>
-                      <th className="px-2 py-3 font-medium">預約日期及時間</th>
-                      <th className="px-2 py-3 font-medium whitespace-nowrap">總時長</th>
-                      <th className="px-5 py-3 font-medium">顧客及電話</th>
-                      <th className="px-2 py-3 font-medium whitespace-nowrap">服務按摩師</th>
-                      <th className="px-5 py-3 font-medium w-[120px]">服務內容</th>
-                      <th className="px-2 py-3 font-medium whitespace-nowrap">結帳金額</th>
-                      <th className="px-2 py-3 font-medium whitespace-nowrap">付款方式</th>
-                      <th className="px-2 py-3 font-medium min-w-[180px]">服務備註</th>
-                      <th className="px-5 py-3 font-medium text-right">刪除</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {orders
-                      .filter(o => o.date.startsWith(orderMonth))
-                      .sort((a,b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || ''))
-                      .map(o => {
+              <div className="flex flex-col">
+                <div className="bg-stone-50/80 px-6 py-2 border-b border-stone-200 flex items-center text-[11px] font-bold text-stone-400 uppercase tracking-widest sticky top-0 z-10">
+                  <div className="w-[35px] text-center text-[11px]">完成</div>
+                  <div className="w-[140px] px-4 font-bold leading-tight flex flex-col">
+                    <span className="text-[11px]">預約日期及時間</span>
+                    <span className="text-[11px]">顧客及電話</span>
+                  </div>
+                  <div className="flex-1 px-2 font-bold whitespace-nowrap text-[11px]">服務按摩師</div>
+                  <div className="w-[24px]"></div>
+                </div>
+                <div className="divide-y divide-stone-100">
+                  {orders
+                    .filter(o => o.date.startsWith(orderMonth))
+                    .sort((a,b) => b.date.localeCompare(a.date) || (b.time || '').localeCompare(a.time || ''))
+                    .map(o => {
                       const m = members.find(x => x.id === o.memberId);
-                      const dateObj = new Date(o.date);
-                      const formattedDate = o.date.replace(/-/g, '/');
                       const endTimeStr = o.time && o.totalDuration ? minsToTime(timeToMins(o.time) + o.totalDuration) : '';
-                      const durationHoursDisplay = (o.totalDuration / 60) % 1 === 0 ? (o.totalDuration / 60) : (o.totalDuration / 60).toFixed(1);
+                      const isExpanded = expandedOrderIds.has(o.id);
 
                       const nowMs = new Date().getTime();
                       const orderEndMs = new Date(`${o.date}T${endTimeStr || '23:59'}:00`).getTime();
                       const isPast = orderEndMs < nowMs;
 
                       return (
-                      <tr key={o.id} className={`hover:bg-stone-50/50 transition ${o.status === 'cancelled' || isPast || o.status === 'completed' ? 'opacity-60 bg-stone-50/50' : ''}`}>
-                        <td className="pl-6 pr-2 py-4 text-center">
-                          <input 
-                            type="checkbox" 
-                            checked={o.status === 'completed'} 
-                            onChange={(e) => toggleOrderStatus(o.id, e.target.checked)}
-                            className="w-4 h-4 cursor-pointer text-stone-800 rounded border-stone-300 focus:ring-stone-800"
-                            disabled={o.status === 'cancelled'}
-                          />
-                        </td>
-                        <td className="px-2 py-4">
-                          <div className="font-medium text-stone-800">
-                            {formattedDate} 
+                        <div key={o.id} className={`transition-all ${o.status === 'completed' ? 'bg-emerald-50/20' : (o.status === 'cancelled' || isPast) ? 'bg-stone-50/50 opacity-70' : 'bg-white'} hover:bg-stone-50 group`}>
+                          <div className="flex items-center px-6 py-4 cursor-pointer" onClick={() => toggleOrderExpand(o.id)}>
+                            <div className="w-[35px] flex justify-center" onClick={e => e.stopPropagation()}>
+                              <input 
+                                type="checkbox" 
+                                checked={o.status === 'completed'} 
+                                onChange={(e) => toggleOrderStatus(o.id, e.target.checked)}
+                                className="w-4 h-4 cursor-pointer accent-stone-800 rounded border-stone-300"
+                                disabled={o.status === 'cancelled'}
+                              />
+                            </div>
+                            <div className="w-[140px] px-4 flex flex-col gap-0.5 min-w-0">
+                              <div className="flex items-center gap-1.5 overflow-visible">
+                                <span className={`text-[10px] font-bold whitespace-nowrap ${o.status === 'completed' ? 'text-stone-400' : 'text-stone-800'}`}>
+                                  {o.date.replace(/-/g, '/')}
+                                </span>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded border border-stone-200 font-bold whitespace-nowrap shrink-0 ${o.status === 'completed' ? 'text-stone-300 border-stone-100' : 'text-stone-600 bg-stone-50/50'}`}>
+                                  {(o.totalDuration / 60) % 1 === 0 ? (o.totalDuration / 60) : (o.totalDuration / 60).toFixed(1)}小時
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className={`text-[12px] font-black ${o.status === 'completed' ? 'text-stone-400' : 'text-stone-900'}`}>
+                                  {m?.name || '未知客戶'}
+                                </span>
+                                {o.isAssignedByShop && <span className={`text-[10px] ${o.status === 'completed' ? 'bg-stone-100 text-stone-400' : 'bg-amber-100 text-amber-700'} px-1 py-0.5 rounded-full font-bold`}>分</span>}
+                                {o.status === 'cancelled' && <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1 py-0.5 rounded-full">消</span>}
+                              </div>
+                              <div className={`text-[10px] font-mono ${o.status === 'completed' ? 'text-stone-300' : 'text-stone-400'}`}>
+                                {m?.phoneNumber || o.memberId}
+                              </div>
+                            </div>
+                            <div className="flex-1 px-2 flex flex-col justify-center min-w-0">
+                              <span className={`text-[11px] font-bold whitespace-nowrap truncate ${o.status === 'completed' ? 'text-stone-400' : 'text-stone-700'}`}>
+                                {o.therapistPreference === '不指定按摩師' || !o.therapistPreference ? '不指定' : 
+                                 o.therapistPreference === '男按摩師即可' ? '男按摩師' : 
+                                 o.therapistPreference === '女按摩師即可' ? '女按摩師' : o.therapistPreference}
+                              </span>
+                            </div>
+                            <div className="w-[24px] flex justify-end">
+                              <ChevronRight className={`w-4 h-4 text-stone-300 transition-transform ${isExpanded ? 'rotate-90 text-stone-800' : 'group-hover:text-stone-500'}`} />
+                            </div>
                           </div>
-                          <div className="text-stone-500">{o.time}{endTimeStr ? `~${endTimeStr}` : ''}</div>
-                          {o.status === 'cancelled' && <div className="text-red-500 text-[10px] mt-1 font-semibold">客人已取消</div>}
-                        </td>
-                        <td className="px-2 py-4 text-stone-600 whitespace-nowrap">{durationHoursDisplay}小時</td>
-                        <td className="px-5 py-4">
-                          <div 
-                            className="font-medium text-stone-800 cursor-pointer hover:underline"
-                            onClick={() => {
-                              if (m) openCustomerModal(m);
-                            }}
-                          >{m?.name || '未知'}</div>
-                          <div className="text-xs text-stone-500">{o.memberId}</div>
-                        </td>
-                        <td className="px-2 py-4 text-stone-600 font-medium whitespace-nowrap">{o.therapistPreference || '不指定按摩師'}</td>
-                        <td className="px-5 py-4 w-[120px]">
-                          <ul className="list-disc list-inside text-stone-600 text-xs space-y-1">
-                            {sortOrderItems(o.items).map((item, i) => <li key={`${o.id}-i-${i}`} className="whitespace-nowrap truncate w-full">{item.name}({item.duration}分鐘)</li>)}
-                          </ul>
-                        </td>
-                        <td className="px-2 py-4 whitespace-nowrap">
-                           <div className="font-medium text-sm">NT$ {o.finalPrice}</div>
-                           {o.discountAmount > 0 && (
-                             <div className="mt-1">
-                               <button 
-                                 onClick={() => toggleFormula(o.id)}
-                                 className="text-[10px] text-green-600 hover:text-green-700 underline cursor-pointer"
-                               >
-                                 {showFormulaIds.has(o.id) ? '收起明細' : '查看明細'}
-                               </button>
-                               {showFormulaIds.has(o.id) && (
-                                 <div className="text-[10px] text-stone-400 mt-1 leading-tight max-w-[120px] whitespace-normal">
-                                   已扣 ${o.discountAmount}<br/>
-                                   {o.discountFormula}
-                                 </div>
-                               )}
-                             </div>
-                           )}
-                        </td>
-                        <td className="px-2 py-4 text-stone-600 whitespace-nowrap">
-                          <select 
-                            value={o.paymentMethod || ''} 
-                            onChange={(e) => {
-                               db.updateOrder(o.id, { paymentMethod: e.target.value });
-                               setOrders(db.getOrders().sort((a,b) => b.createdAt - a.createdAt));
-                            }}
-                            className="p-1 border border-stone-200 rounded text-xs outline-none bg-transparent hover:bg-stone-50 transition cursor-pointer"
-                          >
-                            <option value="">請選擇</option>
-                            <option value="現金">現金</option>
-                            <option value="線上刷卡">線上刷卡</option>
-                            <option value="LINE PAY">LINE PAY</option>
-                            <option value="街口支付">街口支付</option>
-                            <option value="全支付">全支付</option>
-                          </select>
-                        </td>
-                        <td className="px-2 py-4">
-                          <textarea
-                            className="w-full min-h-[40px] text-xs p-2 border border-stone-200 rounded resize-none focus:outline-none focus:border-stone-500"
-                            placeholder="新增備註..."
-                            defaultValue={o.note || ''}
-                            onBlur={(e) => {
-                               if (e.target.value !== o.note) {
-                                 db.updateOrder(o.id, { note: e.target.value });
-                                 setOrders(db.getOrders());
-                               }
-                            }}
-                          ></textarea>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <button onClick={()=>handleDeleteOrder(o.id)} className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded transition">
-                            <Trash2 className="w-4 h-4"/>
-                          </button>
-                        </td>
-                      </tr>
-                    )})}
-                    {orders.filter(o => o.date.startsWith(orderMonth)).length === 0 && (
-                      <tr><td colSpan={9} className="px-5 py-8 text-center text-stone-400">目前月份無訂單紀錄</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                          
+                          {isExpanded && (
+                            <div className="px-6 pb-6 pt-3 grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-dotted border-stone-200 mx-4 mb-4 rounded-xl mt-1 bg-stone-50/50">
+                              <div className="space-y-4">
+                                <div>
+                                  <label className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1 block">服務按摩師</label>
+                                  <span className="text-xs font-bold text-stone-700 bg-white px-2 py-1 rounded border border-stone-100 inline-block shadow-sm">
+                                    {o.therapistPreference === '不指定按摩師' || !o.therapistPreference ? '不指定' : 
+                                     o.therapistPreference === '男按摩師即可' ? '男按摩師' : 
+                                     o.therapistPreference === '女按摩師即可' ? '女按摩師' : o.therapistPreference}
+                                  </span>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1 block">時長 / 金額</label>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-stone-600 font-medium">{o.totalDuration} 分鐘</span>
+                                    <span className="text-sm font-black text-stone-900">NT$ {o.finalPrice}</span>
+                                    {o.discountAmount > 0 && (
+                                      <div className="bg-emerald-100/50 p-2 rounded-lg mt-1 border border-emerald-200">
+                                        <p className="text-[10px] text-emerald-700 font-bold mb-1">折扣明細：</p>
+                                        <p className="text-[10px] text-emerald-600 leading-tight whitespace-pre-line">{o.discountFormula}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-4">
+                                <div>
+                                  <label className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1 block">服務內容</label>
+                                  <div className="space-y-1">
+                                    {sortOrderItems(o.items).map((item, i) => (
+                                      <div key={i} className="flex items-center text-xs text-stone-600 bg-white px-2 py-1.5 rounded border border-stone-100 shadow-sm">
+                                        <Plus className="w-2.5 h-2.5 mr-2 text-stone-300" />
+                                        {item.name} ({item.duration}分)
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1 block">付款方式</label>
+                                  <select 
+                                    onClick={e => e.stopPropagation()}
+                                    value={o.paymentMethod || ''} 
+                                    onChange={(e) => {
+                                      db.updateOrder(o.id, { paymentMethod: e.target.value });
+                                      setOrders(db.getOrders());
+                                    }}
+                                    className="w-full p-2 border border-stone-200 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-stone-400 shadow-sm"
+                                  >
+                                    <option value="">請選擇</option>
+                                    <option value="現金">現金</option>
+                                    <option value="線上刷卡">線上刷卡</option>
+                                    <option value="LINE PAY">LINE PAY</option>
+                                    <option value="街口支付">街口支付</option>
+                                    <option value="全支付">全支付</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="space-y-4">
+                                <div>
+                                  <label className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1 block">服務備註</label>
+                                  <textarea
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-full text-xs p-3 border border-stone-200 rounded-xl resize-none focus:outline-none focus:ring-1 focus:ring-stone-400 bg-white h-24 shadow-sm"
+                                    placeholder="備註資訊..."
+                                    defaultValue={o.note || ''}
+                                    onBlur={(e) => {
+                                      if (e.target.value !== o.note) {
+                                        db.updateOrder(o.id, { note: e.target.value });
+                                        setOrders(db.getOrders());
+                                      }
+                                    }}
+                                  />
+                                </div>
+                                <div className="flex justify-end pt-2">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteOrder(o.id);
+                                    }}
+                                    className="flex items-center gap-2 text-red-400 hover:text-red-600 transition text-[11px] font-bold px-3 py-2 rounded-lg hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    刪除此筆預約
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  {orders.filter(o => o.date.startsWith(orderMonth)).length === 0 && (
+                    <div className="px-6 py-12 text-center text-stone-400 font-medium bg-stone-50/30">目前月份無訂單紀錄</div>
+                  )}
+                </div>
               </div>
             )}
             
@@ -952,22 +1058,14 @@ export default function Backend() {
             <div className="px-6 py-4 border-b border-stone-200 bg-stone-50">
               <h2 className="font-medium text-stone-800">會員列表</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm min-w-[900px]">
+            <div>
+              <table className="w-full text-left text-sm table-auto">
                 <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
                   <tr>
-                    <th className="pl-6 pr-2 py-3 font-medium cursor-pointer w-24 text-left" title="點擊展開/收合消費紀錄">姓名</th>
-                    <th className="px-2 py-3 font-medium w-16 text-center">性別</th>
-                    <th className="px-2 py-3 font-medium w-32 text-left">電話</th>
-                    <th className="px-2 py-3 font-medium w-32 text-left">LINE ID</th>
-                    <th className="px-2 py-3 font-medium w-32 text-left">生日</th>
-                    <th className="pl-2 pr-1 py-3 font-medium w-14 text-center">星座</th>
-                    <th className="pl-1 pr-2 py-3 font-medium w-14 text-center">年齡</th>
-                    <th className="px-2 py-3 font-medium w-20 text-center">消費次數</th>
-                    <th className="pr-6 py-3 font-medium text-right">累計金額</th>
-                    <th className="px-0 py-3 font-medium w-28 text-center text-stone-400">會員等級</th>
-                    <th className="px-2 py-3 font-medium w-32 text-center text-stone-500">結束日期</th>
-                    <th className="px-2 py-3 font-medium text-center">消費紀錄</th>
+                    <th className="pl-6 pr-1 py-3 font-medium w-max text-left">姓名</th>
+                    <th className="px-1 py-3 font-medium w-max text-left">電話</th>
+                    <th className="px-1 py-3 font-medium w-max text-center text-stone-400">會員等級</th>
+                    <th className="pr-6 py-3 font-medium text-right w-full"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -977,21 +1075,15 @@ export default function Backend() {
                     const isExpanded = expandedMemberId === m.id;
                     return (
                     <React.Fragment key={m.id}>
-                      <tr id={`member-row-${m.id}`} className="hover:bg-stone-50/50 transition whitespace-nowrap">
-                        <td className="pl-6 pr-2 py-4 font-medium text-stone-800 cursor-pointer hover:text-stone-600 underline decoration-stone-300 underline-offset-4 whitespace-nowrap text-left"
-                          onClick={() => handleExpand(m)}
-                        >
-                          {m.name}
+                      <tr id={`member-row-${m.id}`} className={`hover:bg-stone-50/50 transition whitespace-nowrap cursor-pointer ${isExpanded ? 'bg-stone-50' : ''}`} onClick={() => handleExpand(m)}>
+                        <td className="pl-6 pr-1 py-4 font-bold text-stone-800 text-[14px] whitespace-nowrap text-left w-max">
+                          <div className="flex items-center gap-1.5 truncate">
+                            {m.name}
+                            <span className="text-[10px] text-stone-400 font-normal shrink-0">({m.gender || '女'})</span>
+                          </div>
                         </td>
-                        <td className="px-2 py-4 text-stone-600 text-center">{m.gender || '女'}</td>
-                        <td className="px-2 py-4 text-stone-600 text-left">{m.id}</td>
-                        <td className="px-2 py-4 text-stone-600 text-left">{m.lineId || '-'}</td>
-                        <td className="px-2 py-4 text-stone-600 whitespace-nowrap text-left">{m.birthday}</td>
-                        <td className="pl-2 pr-1 py-4 text-stone-600 whitespace-nowrap text-center text-xs">{getZodiacSign(m.birthday)}</td>
-                        <td className="pl-1 pr-2 py-4 text-stone-600 whitespace-nowrap text-center">{getAge(m.birthday)}</td>
-                        <td className="px-2 py-4 text-stone-600 text-center">{memberOrders.length} 次</td>
-                        <td className="pr-6 py-4 text-stone-600 font-medium text-right">NT$ {totalSpent}</td>
-                        <td className="px-0 py-4 text-center">
+                        <td className="px-1 py-4 text-stone-600 font-mono text-[13px] text-left w-max truncate">{m.id}</td>
+                        <td className="px-1 py-4 text-center w-max">
                           <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm border mx-auto ${
                             m.level === '金卡' ? 'bg-amber-50 text-amber-800 border-amber-200' : 
                             m.level === '黑卡' ? 'bg-stone-800 text-stone-100 border-stone-800' : 
@@ -1000,20 +1092,48 @@ export default function Backend() {
                             {m.level}
                           </div>
                         </td>
-                        <td className="px-2 py-4 text-stone-600 text-center text-xs">{m.membershipEndDate || '-'}</td>
-                        <td className="px-2 py-4 text-center">
-                          <button 
-                            onClick={() => handleExpand(m)}
-                            className="px-3 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 rounded text-xs transition"
-                          >
-                            {isExpanded ? '收合' : '檢視'}
-                          </button>
+                        <td className="pr-6 py-4 text-right w-full">
+                          <ChevronRight className={`w-4 h-4 text-stone-300 transition-transform ${isExpanded ? 'rotate-90 text-stone-800' : ''}`} />
                         </td>
                       </tr>
                       {isExpanded && (
                         <tr className="bg-stone-50/40">
-                          <td colSpan={12} className="px-6 py-4">
-                            <div className="space-y-6">
+                          <td colSpan={4} className="px-0 py-0 border-b border-stone-200 overflow-hidden">
+                            <div className="px-6 py-6 space-y-6 animate-in slide-in-from-top-2 duration-300">
+                              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mb-6">
+                                <div className="grid grid-cols-2 gap-x-10 gap-y-4">
+                                  <div className="flex items-baseline gap-3 whitespace-nowrap">
+                                    <span className="text-[11px] text-emerald-600 uppercase font-black tracking-widest shrink-0">年齡</span>
+                                    <span className="text-sm font-bold text-stone-700 flex items-baseline">
+                                      {getAge(m.birthday) || '未設定'}
+                                      {m.birthday && (
+                                        <span className="text-[10px] font-normal text-stone-500 ml-1.5 opacity-80">
+                                          ({parseInt(m.birthday.split('-')[0]) - 1911}年次)
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-baseline gap-3 whitespace-nowrap">
+                                    <span className="text-[11px] text-emerald-600 uppercase font-black tracking-widest shrink-0">消費次數</span>
+                                    <span className="text-sm font-bold text-stone-700">{memberOrders.length}次</span>
+                                  </div>
+                                  <div className="flex items-baseline gap-3 whitespace-nowrap">
+                                    <span className="text-[11px] text-emerald-600 uppercase font-black tracking-widest shrink-0">星座</span>
+                                    <span className="text-sm font-bold text-stone-700 flex items-baseline">
+                                      {getZodiacSign(m.birthday) || '未設定'}
+                                      {m.birthday && (
+                                        <span className="text-[10px] font-normal text-stone-500 ml-1.5 opacity-80">
+                                          ({m.birthday.split('-').slice(1).map(v => parseInt(v)).join('/')})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-baseline gap-3 whitespace-nowrap">
+                                    <span className="text-[11px] text-emerald-600 uppercase font-black tracking-widest shrink-0">累計金額</span>
+                                    <span className="text-[9px] font-bold text-stone-900 underline decoration-emerald-300 underline-offset-3 decoration-2">NT${totalSpent.toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              </div>
                               {/* Top Section: Info & Note */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="border border-stone-200 rounded-lg p-5 bg-white shadow-sm md:col-span-2">
@@ -1040,40 +1160,44 @@ export default function Backend() {
                                       </div>
                                       <div className="flex-shrink-0">
                                         <label className="block text-xs text-stone-500 mb-1">手機號碼</label>
-                                        <input type="text" value={editPhone} onChange={e=>setEditPhone(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-24 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                        <input type="text" value={editPhone} onChange={e=>setEditPhone(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-[120px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition font-mono" />
                                       </div>
                                       <div className="flex-shrink-0">
                                         <label className="block text-xs text-stone-500 mb-1">LINE ID</label>
-                                        <input type="text" value={editLineId} onChange={e=>setEditLineId(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-24 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                        <input type="text" value={editLineId} onChange={e=>setEditLineId(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-[85px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
                                       </div>
                                       <div className="flex-shrink-0">
-                                        <label className="block text-xs text-stone-500 mb-1">生日</label>
-                                        <div className="relative w-[110px] cursor-pointer">
-                                          <input 
-                                            type="date" 
-                                            value={editBirthday} 
-                                            onChange={e=>setEditBirthday(e.target.value)} 
-                                            onBlur={()=>handleInfoSave(m.id)} 
-                                            onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                                            style={{ colorScheme: 'light' }}
-                                          />
-                                          <div className="w-full text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white text-stone-800 transition flex items-center justify-between">
-                                            <span className={editBirthday ? "" : "text-stone-400 truncate"}>{editBirthday ? editBirthday.replace(/-/g, '/') : '年/月/日'}</span>
+                                        <div className="flex gap-3">
+                                          <div>
+                                            <label className="block text-xs text-stone-500 mb-1">生日</label>
+                                            <div className="relative w-[110px] cursor-pointer">
+                                              <input 
+                                                type="date" 
+                                                value={editBirthday} 
+                                                onChange={e=>setEditBirthday(e.target.value)} 
+                                                onBlur={()=>handleInfoSave(m.id)} 
+                                                onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                                style={{ colorScheme: 'light' }}
+                                              />
+                                              <div className="w-full text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white text-stone-800 transition flex items-center justify-between">
+                                                <span className={editBirthday ? "" : "text-stone-400 truncate"}>{editBirthday ? editBirthday.replace(/-/g, '/') : '年/月/日'}</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-stone-500 mb-1">主要按摩師</label>
+                                            <select value={editPrimaryTherapist} onChange={e=>{
+                                              setEditPrimaryTherapist(e.target.value);
+                                              handleInfoSave(m.id, { primaryTherapist: e.target.value });
+                                            }} className="w-[100px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition px-1">
+                                              <option value="">(無)</option>
+                                              {THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(name => (
+                                                <option key={name} value={name}>{name}</option>
+                                              ))}
+                                            </select>
                                           </div>
                                         </div>
-                                      </div>
-                                      <div className="flex-shrink-0">
-                                        <label className="block text-xs text-stone-500 mb-1">主要按摩師</label>
-                                        <select value={editPrimaryTherapist} onChange={e=>{
-                                          setEditPrimaryTherapist(e.target.value);
-                                          handleInfoSave(m.id, { primaryTherapist: e.target.value });
-                                        }} className="w-[100px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition px-1">
-                                          <option value="">(無)</option>
-                                          {THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(name => (
-                                            <option key={name} value={name}>{name}</option>
-                                          ))}
-                                        </select>
                                       </div>
                                     </div>
 
@@ -1399,74 +1523,77 @@ export default function Backend() {
             const expectedSalary = baseSalary + closingBonus + completionBonus;
 
             return (
-              <>
-                   {/* First Row: Main Dashboard */}
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-l-emerald-500 border border-stone-200 flex flex-col justify-between hover:shadow-md transition">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">本月預計薪資</p>
-                          <p className="text-4xl font-light text-emerald-600">${expectedSalary.toLocaleString()}</p>
-                        </div>
-                        <button 
-                          onClick={() => setViewingAppts('today')}
-                          className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 text-left hover:border-stone-400 hover:shadow-md transition group"
-                        >
-                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">今日預約數</p>
-                          <div className="flex justify-between items-end">
-                            <p className="text-4xl font-light text-stone-800">{todaysOrdersCount} <span className="text-sm text-stone-400">筆</span></p>
-                            <span className="text-xs text-emerald-600 font-medium opacity-0 group-hover:opacity-100 transition translate-x-2 group-hover:translate-x-0">查看列表 →</span>
-                          </div>
-                        </button>
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 hover:shadow-md transition">
-                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">本月累計預約</p>
-                          <p className="text-4xl font-light text-stone-800">{monthlyOrders.length} <span className="text-sm text-stone-400">筆</span></p>
-                        </div>
-                        <button 
-                          onClick={() => setViewingAppts('all')}
-                          className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 text-left hover:border-stone-400 hover:shadow-md transition group"
-                        >
-                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">所有預約紀錄</p>
-                          <div className="flex justify-between items-end">
-                            <p className="text-4xl font-light text-stone-800">{therapistOrders.length} <span className="text-sm text-stone-400">筆</span></p>
-                            <Calendar className="w-5 h-5 text-stone-300 group-hover:text-stone-600 transition" />
-                          </div>
-                        </button>
-                      </div>
+              <div className="space-y-4">
+                  {/* Main Highlight: Centered Salary Box */}
+                  <div className="bg-white p-4 rounded-2xl shadow-sm border border-stone-200 flex flex-col items-center justify-center hover:shadow-md transition h-[95px] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500 opacity-20"></div>
+                    <p className="text-[14px] font-semibold uppercase tracking-wider text-stone-500 mb-1">本月預計薪資</p>
+                    <p className="text-[28px] leading-[30px] font-black text-emerald-600">${expectedSalary.toLocaleString()}</p>
+                  </div>
 
-                      {/* Second Row: Detailed Breakdown */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 border-dashed flex flex-col justify-between">
-                          <p className="text-xs font-semibold text-stone-500 mb-2 uppercase tracking-wide">本月基本薪資 (時數×600)</p>
-                          <p className="text-2xl text-stone-800 font-medium">${baseSalary.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 border-dashed flex flex-col justify-between">
-                          <p className="text-xs font-semibold text-stone-500 mb-2 uppercase tracking-wide">本月完課獎金</p>
-                          <p className="text-2xl text-stone-800 font-medium">${completionBonus.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 border-dashed">
-                          <p className="text-xs font-semibold text-stone-500 mb-3 uppercase tracking-wide">本月締結獎金</p>
-                          <div className="space-y-2">
-                            <button 
-                              onClick={() => setBonusModal({ therapist: selectedTherapistPortal, level: '金卡', month: orderMonth })}
-                              className="flex justify-between text-sm w-full bg-white/50 hover:bg-white p-2 rounded-xl transition border border-transparent hover:border-emerald-100"
-                            >
-                              <span className="text-stone-600">金卡：<span className="text-stone-900 font-bold">{goldMembers.length}</span> 位</span>
-                              <span className="text-emerald-700 font-semibold">${(goldMembers.length * 1200).toLocaleString()}</span>
-                            </button>
-                            <button 
-                              onClick={() => setBonusModal({ therapist: selectedTherapistPortal, level: '黑卡', month: orderMonth })}
-                              className="flex justify-between text-sm w-full bg-white/50 hover:bg-white p-2 rounded-xl transition border border-transparent hover:border-emerald-100"
-                            >
-                              <span className="text-stone-600">黑卡：<span className="text-stone-900 font-bold">{blackMembers.length}</span> 位</span>
-                              <span className="text-emerald-700 font-semibold">${(blackMembers.length * 3000).toLocaleString()}</span>
-                            </button>
-                          </div>
-                        </div>
+                  {/* Metrics Grid: 3x2 Layout */}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {/* Row 1: Appointment Stats */}
+                    <button 
+                      onClick={() => setViewingAppts('today')}
+                      className="bg-white p-3 rounded-xl shadow-sm border border-stone-200 text-center hover:border-emerald-300 hover:shadow-sm transition group cursor-pointer"
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1.5">今日預約數</p>
+                      <p className="text-xl font-bold text-stone-800">{todaysOrdersCount}<span className="text-[10px] ml-0.5 text-stone-400 font-normal">筆</span></p>
+                    </button>
+
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-stone-200 text-center">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1.5">本月累計預約</p>
+                      <p className="text-xl font-bold text-stone-800">{monthlyOrders.length}<span className="text-[10px] ml-0.5 text-stone-400 font-normal">筆</span></p>
+                    </div>
+
+                    <button 
+                      onClick={() => setViewingAppts('all')}
+                      className="bg-white p-3 rounded-xl shadow-sm border border-stone-200 text-center hover:border-emerald-300 hover:shadow-sm transition group cursor-pointer"
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1.5">所有預約紀錄</p>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <p className="text-xl font-bold text-stone-800">{therapistOrders.length}<span className="text-[10px] ml-0.5 text-stone-400 font-normal">筆</span></p>
                       </div>
-                    </>
-                  );
-                })()}
+                    </button>
+
+                    {/* Row 2: Salary Components */}
+                    <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200 border-dashed text-center">
+                      <p className="text-[10px] font-bold text-stone-400 mb-1 uppercase tracking-wide">本月基本薪資</p>
+                      <p className="text-[10px] text-stone-400 mb-1">(時數x600)</p>
+                      <p className="text-base text-stone-700 font-black">${baseSalary.toLocaleString()}</p>
+                    </div>
+
+                    <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200 border-dashed text-center flex flex-col justify-center">
+                      <p className="text-[10px] font-bold text-stone-400 mb-1.5 uppercase tracking-wide">本月完課獎金</p>
+                      <p className="text-base text-stone-700 font-black">${completionBonus.toLocaleString()}</p>
+                    </div>
+
+                    <div className="bg-stone-50/80 p-3 rounded-xl border border-stone-200 border-dashed text-center">
+                      <p className="text-[10px] font-bold text-stone-400 mb-1.5 uppercase tracking-wide">本月締結獎金</p>
+                      <div className="flex flex-col gap-1">
+                        <button 
+                          onClick={() => setBonusModal({ therapist: selectedTherapistPortal, level: '金卡', month: orderMonth })}
+                          className="flex justify-between items-center text-[10px] w-full bg-white/40 hover:bg-white px-1.5 py-0.5 rounded-md transition border border-transparent hover:border-emerald-100"
+                        >
+                          <span className="text-stone-500">金:{goldMembers.length}</span>
+                          <span className="text-emerald-700 font-bold">${(goldMembers.length * 1200).toLocaleString()}</span>
+                        </button>
+                        <button 
+                          onClick={() => setBonusModal({ therapist: selectedTherapistPortal, level: '黑卡', month: orderMonth })}
+                          className="flex justify-between items-center text-[10px] w-full bg-white/40 hover:bg-white px-1.5 py-0.5 rounded-md transition border border-transparent hover:border-emerald-100"
+                        >
+                          <span className="text-stone-500">黑:{blackMembers.length}</span>
+                          <span className="text-emerald-700 font-bold">${(blackMembers.length * 3000).toLocaleString()}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
               </div>
-            )}
+            );
+          })()}
+        </div>
+      )}
 
             {!isAdmin && selectedTherapistPortal && (
                <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
@@ -1566,72 +1693,62 @@ export default function Backend() {
                       });
                     })()}
                   </div>
-               </div>
-            )}
+                </div>
+              )}
 
             <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-medium text-stone-800 flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-stone-600" />
-                      師傅出勤設定
-                  </h2>
-                  <div className="flex items-center gap-3">
-                    {(() => {
-                      const now = new Date();
-                      const currentMonthStr = now.toISOString().slice(0, 7);
-                      const nextTwoMonths = new Date(now.getFullYear(), now.getMonth() + 2, 1);
-                      const maxMonthStr = nextTwoMonths.toISOString().slice(0, 7);
-                      return (
-                        <input 
-                          type="month" 
-                          min={currentMonthStr} 
-                          max={maxMonthStr} 
-                          value={orderMonth} 
-                          onChange={e => setOrderMonth(e.target.value)} 
-                          className="text-sm border border-stone-200 rounded-lg p-2 outline-none focus:border-stone-500 bg-white" 
-                        />
-                      );
-                    })()}
-                    {selectedTherapistPortal && (
-                      <div className="text-sm text-stone-500 bg-stone-100 px-3 py-1 rounded-full">
-                        正在設定：{selectedTherapistPortal}
-                      </div>
-                    )}
+                <div className="mb-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-[18px] font-medium text-stone-800 flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-stone-600" />
+                        師傅出勤設定
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-x-12 gap-y-4 bg-stone-50 p-4 rounded-xl border border-stone-100">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs font-bold text-stone-400 uppercase tracking-wider ml-1">按摩師</span>
+                      <select 
+                        value={selectedTherapistPortal} 
+                        onChange={(e) => setSelectedTherapistPortal(e.target.value)}
+                        className="text-sm border border-stone-200 rounded-lg p-2.5 outline-none focus:border-stone-500 bg-white min-w-[160px] shadow-sm cursor-pointer"
+                      >
+                        <option value="">選擇按摩師</option>
+                        {THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(t => {
+                          const isMe = authedUser.role === 'therapist' && authedUser.name === t;
+                          const canSelect = isAdmin || isMe;
+                          return (
+                            <option key={t} value={t} disabled={!canSelect}>
+                              {t} {isMe ? '(本人)' : (!canSelect ? '🔒' : '')}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs font-bold text-stone-400 uppercase tracking-wider ml-1">月份</span>
+                      {(() => {
+                        const now = new Date();
+                        const currentMonthStr = now.toISOString().slice(0, 7);
+                        const nextTwoMonths = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+                        const maxMonthStr = nextTwoMonths.toISOString().slice(0, 7);
+                        return (
+                          <input 
+                            type="month" 
+                            min={currentMonthStr} 
+                            max={maxMonthStr} 
+                            value={orderMonth} 
+                            onChange={e => setOrderMonth(e.target.value)} 
+                            className="text-sm border border-stone-200 rounded-lg p-2.5 outline-none focus:border-stone-500 bg-white shadow-sm cursor-pointer" 
+                          />
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  {isAdmin && (
-                    <div className="md:col-span-1 space-y-4">
-                      <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
-                        <label className="block text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">選擇師傅</label>
-                        <div className="space-y-1">
-                          {THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(t => (
-                            <button 
-                              key={t}
-                              onClick={() => setSelectedTherapistPortal(t)}
-                              className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition ${selectedTherapistPortal === t ? 'bg-stone-800 text-white shadow-md' : 'text-stone-600 hover:bg-stone-200/50'}`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {selectedTherapistPortal && (
-                        <div className="bg-stone-900 text-stone-100 p-4 rounded-xl shadow-lg">
-                          <p className="text-xs text-stone-400 mb-2">使用說明</p>
-                          <ul className="text-xs space-y-2 opacity-80 list-disc pl-4">
-                            <li>點擊月曆即可設定該日可預約時段。</li>
-                            <li>未設定時段預設為不排班(灰色)。</li>
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                    <div className={isAdmin ? "md:col-span-3" : "md:col-span-4"}>
-                      {!selectedTherapistPortal ? (
+                <div className="w-full">
+                  {!selectedTherapistPortal ? (
                         <div className="bg-stone-50 rounded-2xl border border-stone-100 border-dashed h-full min-h-[400px] flex flex-col items-center justify-center text-stone-400 p-6 text-center">
                           <Lock className="w-12 h-12 mb-4 opacity-10" />
                           <p className="max-w-xs">
@@ -1718,7 +1835,6 @@ export default function Backend() {
                     )}
                   </div>
                 </div>
-            </div>
 
             {/* Editing Modal */}
             {editingAvailability && (
@@ -1750,14 +1866,14 @@ export default function Backend() {
                         
                         <div className="p-6 pt-5 space-y-5 max-h-[60vh] overflow-y-auto w-full bg-stone-50">
                             <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 border-b border-stone-200 pb-3 gap-3">
-                              <span className="text-[15px] font-bold text-stone-800 whitespace-nowrap">請選取可服務之時段</span>
+                              <h4 className="text-[16px] font-black text-stone-900 whitespace-nowrap">請選取可服務之時段</h4>
                               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
                                   <button 
                                     onClick={() => {
                                       const newSlots = consolidateAvailability(ALL_TIME_SLOTS);
                                       setEditingAvailability({ ...editingAvailability, slots: newSlots });
                                     }}
-                                    className="text-[10px] font-bold px-2.5 py-1.5 bg-white text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition shadow-sm active:scale-95"
+                                    className="text-[13px] font-bold px-4 py-2.5 bg-white text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition shadow-sm active:scale-95 whitespace-nowrap cursor-pointer"
                                   >
                                     一鍵全選
                                   </button>
@@ -1765,16 +1881,16 @@ export default function Backend() {
                                     onClick={() => {
                                       setEditingAvailability({ ...editingAvailability, slots: [] });
                                     }}
-                                    className="text-[10px] font-bold px-2.5 py-1.5 bg-white text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition shadow-sm active:scale-95"
+                                    className="text-[13px] font-bold px-4 py-2.5 bg-white text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition shadow-sm active:scale-95 whitespace-nowrap cursor-pointer"
                                   >
                                     全部取消
                                   </button>
                                   <button 
                                     onClick={() => setShowCopyCalendar(true)}
-                                    className="text-[10px] font-bold px-2.5 py-1.5 bg-stone-800 text-white border border-stone-800 rounded-lg hover:bg-stone-700 transition shadow-sm flex items-center gap-1 active:scale-95"
+                                    className="text-[13px] font-bold px-4 py-2.5 bg-stone-800 text-white border border-stone-800 rounded-lg hover:bg-stone-700 transition shadow-sm flex items-center gap-1 active:scale-95 whitespace-nowrap cursor-pointer"
                                   >
-                                    <Plus className="w-3 h-3" />
-                                    複製此排班至
+                                    <Plus className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-90 transition-transform" />
+                                    複製此排班
                                   </button>
                               </div>
                             </div>
@@ -1880,11 +1996,11 @@ export default function Backend() {
                                                     {days}
                                                 </div>
                                                 <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
-                                                    <span className="text-[10px] text-stone-500 font-medium">已選擇 {copyTargetDates.length} 個日期</span>
+                                                    <span className="text-[11px] text-stone-500 font-medium">已選擇 {copyTargetDates.length} 個日期</span>
                                                     <div className="flex gap-2">
                                                        <button 
                                                             onClick={() => { setShowCopyCalendar(false); setCopyTargetDates([]); }}
-                                                            className="px-3 py-1 text-[10px] font-bold text-stone-500 hover:text-stone-700 transition"
+                                                            className="px-4 py-2 text-[13px] font-bold text-stone-500 hover:text-stone-700 transition cursor-pointer"
                                                        >
                                                             取消
                                                        </button>
@@ -1909,7 +2025,7 @@ export default function Backend() {
                                                                     }
                                                                 });
                                                             }}
-                                                            className={`px-3 py-1 text-[10px] font-bold rounded-lg transition shadow-sm ${
+                                                            className={`px-4 py-2 text-[13px] font-bold rounded-lg transition shadow-sm cursor-pointer ${
                                                                 copyTargetDates.length === 0 
                                                                 ? 'bg-stone-100 text-stone-300 cursor-not-allowed' 
                                                                 : 'bg-stone-800 text-white hover:bg-stone-700 active:scale-95'
@@ -1988,6 +2104,7 @@ export default function Backend() {
                                     }
                                     setAvailabilities(db.getAvailability());
                                     setEditingAvailability(null);
+                                    setConfirmAction({ message: '排班設定已儲存！' });
                                 }}
                                 className="flex-1 py-3.5 bg-stone-800 text-white font-black rounded-2xl hover:bg-stone-900 transition shadow-[0_10px_25px_rgba(0,0,0,0.2)] text-sm active:scale-95 flex items-center justify-center gap-2"
                             >
@@ -2115,7 +2232,7 @@ export default function Backend() {
 
       {/* Confirmation Dialog */}
       {confirmAction && (
-        <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[500] bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-6">
             <h3 className="text-lg font-medium text-stone-800">{confirmAction.onConfirm ? '確認操作' : '系統提示'}</h3>
             <p className="text-stone-600 whitespace-pre-wrap">{confirmAction.message}</p>
