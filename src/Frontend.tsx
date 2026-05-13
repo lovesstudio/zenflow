@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, COURSES, Member, OrderItem, Order, calculateDiscount, ALL_TIME_SLOTS, isSlotAvailable, Gender, TherapistPreference, timeToMins, minsToTime, getDiscountStatus, sortOrderItems } from './store';
-import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X } from 'lucide-react';
+import { db, COURSES, Member, OrderItem, Order, calculateDiscount, ALL_TIME_SLOTS, isSlotAvailable, isDayAvailable, Gender, TherapistPreference, timeToMins, minsToTime, getDiscountStatus, sortOrderItems, TherapistAvailability } from './store';
+import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X, ChevronLeft } from 'lucide-react';
 
 const getZodiacSign = (dateString: string) => {
   if (!dateString) return '';
@@ -37,8 +37,12 @@ export default function Frontend() {
 
   // Polling for orders to check real-time availability
   const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [availabilities, setAvailabilities] = useState<TherapistAvailability[]>([]);
   useEffect(() => {
-    const fetchData = () => setAllOrders(db.getOrders());
+    const fetchData = () => {
+      setAllOrders(db.getOrders());
+      setAvailabilities(db.getAvailability());
+    };
     fetchData();
     const interval = setInterval(fetchData, 1000);
     return () => clearInterval(interval);
@@ -49,6 +53,7 @@ export default function Frontend() {
   const [frontendTab, setFrontendTab] = useState<'booking' | 'upcoming' | 'history'>('booking');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [viewMonth, setViewMonth] = useState(new Date());
   
   // Cart (holds only addons, BASE_COURSE is implicit)
   const [cart, setCart] = useState<{ courseId: string, id: string, isUpgrade: boolean }[]>([]);
@@ -147,6 +152,14 @@ export default function Frontend() {
   };
 
   const addToCart = (courseId: string) => {
+    const course = COURSES.find(c => c.id === courseId);
+    if (course) {
+      const isLimited = course.name.includes('芳療油推') || course.name.includes('筋膜刀');
+      if (isLimited) {
+        const count = cart.filter(c => c.courseId === courseId).length;
+        if (count >= 2) return;
+      }
+    }
     setCart([...cart, { courseId, id: Math.random().toString(36).substring(7), isUpgrade: false }]);
   };
 
@@ -199,6 +212,13 @@ export default function Frontend() {
     return { items, totalDuration, originalPrice, discountAmount, discountFormula, finalPrice };
   }, [cart, member, date, allOrders]);
 
+  const hasOilCourse = useMemo(() => {
+    return cart.some(c => {
+      const course = COURSES.find(x => x.id === c.courseId);
+      return course?.name.includes('芳療油推') || c.isUpgrade;
+    });
+  }, [cart]);
+
   const { items, totalDuration, originalPrice, discountAmount, discountFormula, finalPrice } = orderComputation;
 
   const hasFemaleExclusive = cart.some(c => {
@@ -214,34 +234,64 @@ export default function Frontend() {
 
   // Verify currently selected time is still valid after changing duration or therapist
   useEffect(() => {
-    if (date && time && !isSlotAvailable(date, time, totalDuration, allOrders, member?.id, therapistPref)) {
+    if (date && time && !isSlotAvailable(date, time, totalDuration, allOrders, member?.id, therapistPref, availabilities)) {
       setTime(''); // clear invalid time
     }
-  }, [totalDuration, allOrders, date, time, member?.id, therapistPref]);
+  }, [totalDuration, allOrders, date, time, member?.id, therapistPref, availabilities]);
 
   const canCheckout = date && time && totalDuration >= 30 && totalDuration <= 180;
 
   const isTherapistAvailable = (tName: string) => {
     if (!date || !time) return true;
-    if (tName === '不指定按摩師') return true;
-    
-    const startMins = timeToMins(time);
-    const endMins = startMins + totalDuration + 30;
-    
-    // Check overlapping orders for this therapist
-    const overlaps = allOrders.some(o => {
-      if (o.date !== date || o.status === 'cancelled' || o.therapistPreference !== tName) return false;
-      const oStart = timeToMins(o.time || '00:00');
-      const oEnd = oStart + (o.totalDuration || 0) + 30;
+
+    const REAL_THERAPISTS = ['阿翰', 'Kenny', 'Mark', 'Ricky', 'Alice', 'Kelly', 'Miki'];
+
+    const checkIndividualAvailability = (name: string) => {
+      // 1. Mark cannot do Oil Push/Aroma
+      if (name === 'Mark' && hasOilCourse) return false;
       
-      // Check intersection
-      return startMins < oEnd && endMins > oStart;
-    });
-    
-    return !overlaps;
+      // 2. Female Exclusive courses can ONLY be done by Kelly
+      if (hasFemaleExclusive && name !== 'Kelly') return false;
+
+      const startMins = timeToMins(time);
+      const finishMins = startMins + totalDuration;
+      const endMinsWithBuffer = finishMins + 30;
+
+      // 3. Check if scheduled
+      const avail = availabilities.find(a => a.therapistName === name && a.date === date);
+      if (!avail || !avail.slots || avail.slots.length === 0) return false;
+      
+      const isInTime = avail.slots.some(s => startMins >= timeToMins(s.start) && finishMins <= timeToMins(s.end));
+      if (!isInTime) return false;
+
+      // 4. Check for overlapping orders
+      const overlaps = allOrders.some(o => {
+        if (o.date !== date || o.status === 'cancelled' || o.therapistPreference !== name) return false;
+        const oStart = timeToMins(o.time || '00:00');
+        const oEnd = oStart + (o.totalDuration || 0) + 30;
+        return startMins < oEnd && endMinsWithBuffer > oStart;
+      });
+      return !overlaps;
+    };
+
+    if (tName === '不指定按摩師' || tName === '不指定') {
+      return REAL_THERAPISTS.some(checkIndividualAvailability);
+    }
+
+    if (tName === '男按摩師即可') {
+      const MALE = ['阿翰', 'Kenny', 'Mark', 'Ricky'];
+      return MALE.some(checkIndividualAvailability);
+    }
+
+    if (tName === '女按摩師即可') {
+      const FEMALE = ['Alice', 'Kelly', 'Miki'];
+      return FEMALE.some(checkIndividualAvailability);
+    }
+
+    return checkIndividualAvailability(tName);
   };
 
-  const THERAPISTS = ['不指定按摩師', '阿翰(男)', 'Ricky(男)', 'Kenny(男)', 'Mark(男)', '男按摩師即可', 'Alice(女)', 'Kelly(女)', 'Miki(女)', '女按摩師即可'];
+  const THERAPISTS = ['不指定按摩師', '男按摩師即可', '女按摩師即可', '阿翰', 'Alice', 'Kenny', 'Kelly', 'Mark', 'Miki', 'Ricky'];
 
   const handleCheckoutClick = () => {
     if (!canCheckout || !member) return;
@@ -475,69 +525,271 @@ export default function Frontend() {
           {frontendTab === 'booking' && (
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-6">
+              {/* Therapist Preference */}
+              <section>
+                <h3 className="text-lg text-stone-800 mb-1 flex items-center"><User className="w-5 h-5 mr-2 text-stone-400"/> 請先選擇按摩師</h3>
+                <p className="text-xs text-amber-800 mb-4 bg-amber-50 p-3 rounded-xl border border-amber-100">
+                  ＊如選擇「不指定按摩師」或是「男/女按摩師即可」，則由店家為您推薦合適的按摩師。
+                </p>
+                <div className="space-y-4 mb-6">
+                  {/* Flexible Options */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {['不指定按摩師', '男按摩師即可', '女按摩師即可'].map(t => {
+                      const available = isTherapistAvailable(t);
+                      const isSelected = therapistPref === t;
+                      return (
+                        <button 
+                          key={t}
+                          type="button"
+                          disabled={!available}
+                          onClick={() => setTherapistPref(t as TherapistPreference)}
+                          className={`px-1 py-3 text-[13px] rounded-xl border transition-all duration-300 text-center relative group ${
+                            isSelected 
+                              ? 'bg-stone-800 text-white border-stone-800 shadow-md transform scale-[1.02]' 
+                              : available
+                                ? 'bg-white text-stone-700 border-stone-200 hover:border-stone-400 hover:shadow-sm' 
+                                : 'bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed'
+                          }`}
+                        >
+                          <div className={`font-bold transition-colors ${isSelected ? 'text-white' : available ? 'text-stone-700' : 'text-stone-300'}`}>
+                            {t}
+                          </div>
+                          {(date && time && available && !isSelected) && (
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full border border-white animate-pulse"></div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Male Therapists */}
+                  <div>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2 pl-1">男按摩師</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {['阿翰', 'Kenny', 'Mark', 'Ricky'].map(t => {
+                        const available = isTherapistAvailable(t);
+                        const isSelected = therapistPref === t;
+                        let label = "";
+                        if (date && time && !available) {
+                          if (t === 'Mark' && hasOilCourse) label = "不提供油推";
+                          else label = "已約滿";
+                        }
+                        return (
+                          <button 
+                            key={t}
+                            type="button"
+                            disabled={!available}
+                            onClick={() => setTherapistPref(t as TherapistPreference)}
+                            className={`px-1 py-3 text-[13px] rounded-xl border transition-all duration-300 text-center relative group ${
+                              isSelected 
+                                ? 'bg-stone-800 text-white border-stone-800 shadow-md transform scale-[1.02]' 
+                                : available
+                                  ? 'bg-white text-stone-700 border-stone-200 hover:border-stone-400 hover:shadow-sm' 
+                                  : 'bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed'
+                            }`}
+                          >
+                            <div className={`font-bold transition-colors ${isSelected ? 'text-white' : available ? 'text-stone-700' : 'text-stone-300'}`}>
+                              {t}
+                            </div>
+                            {label && (
+                              <div className="text-[9px] mt-0.5 opacity-80 font-medium">
+                                {label}
+                              </div>
+                            )}
+                            {(date && time && available && !isSelected) && (
+                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full border border-white animate-pulse"></div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Female Therapists */}
+                  <div>
+                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2 pl-1">女按摩師</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {['Alice', 'Kelly', 'Miki'].map(t => {
+                        const available = isTherapistAvailable(t);
+                        const isSelected = therapistPref === t;
+                        let label = "";
+                        if (date && time && !available) {
+                          if (hasFemaleExclusive && t !== 'Kelly') label = "限女性師傅";
+                          else label = "已約滿";
+                        }
+                        return (
+                          <button 
+                            key={t}
+                            type="button"
+                            disabled={!available}
+                            onClick={() => setTherapistPref(t as TherapistPreference)}
+                            className={`px-1 py-3 text-[13px] rounded-xl border transition-all duration-300 text-center relative group ${
+                              isSelected 
+                                ? 'bg-stone-800 text-white border-stone-800 shadow-md transform scale-[1.02]' 
+                                : available
+                                  ? 'bg-white text-stone-700 border-stone-200 hover:border-stone-400 hover:shadow-sm' 
+                                  : 'bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed'
+                            }`}
+                          >
+                            <div className={`font-bold transition-colors ${isSelected ? 'text-white' : available ? 'text-stone-700' : 'text-stone-300'}`}>
+                              {t}
+                            </div>
+                            {label && (
+                              <div className="text-[9px] mt-0.5 opacity-80 font-medium">
+                                {label}
+                              </div>
+                            )}
+                            {(date && time && available && !isSelected) && (
+                              <div className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full border border-white animate-pulse"></div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
               {/* DateTime */}
               <section>
-                <h3 className="text-lg text-stone-800 mb-1 flex items-center"><CalendarIcon className="w-5 h-5 mr-2 text-stone-400"/> 請先選擇日期與按摩開始時間</h3>
-                <p className="text-xs text-stone-500 mb-3 bg-amber-50/50 p-2 rounded-lg border border-amber-100">
-                  ＊本店營業時間為 10:00 - 22:00，最晚接受預約時間為 21:30。請選擇營業時間內可完成之服務項目。
+                <h3 className="text-lg text-stone-800 mb-1 flex items-center"><CalendarIcon className="w-5 h-5 mr-2 text-stone-400"/> 再選擇想預約的日期與開始時間</h3>
+                <p className="text-xs text-amber-800 mb-4 bg-amber-50 p-3 rounded-xl border border-amber-100">
+                  ＊本店僅開放今日起至次月底的按摩預約, 每日營業時間為10:00~22:00, 最晚接受預約時間為21:30, 請選擇營業時間內可完成之服務項目。
                 </p>
                 <div className="space-y-4">
+                  {/* Custom Calendar */}
                   {(() => {
                     const today = new Date();
-                    const maxDateObj = new Date(today);
-                    maxDateObj.setMonth(maxDateObj.getMonth() + 1);
-                    const minDateStr = today.toISOString().split('T')[0];
-                    const maxDateStr = maxDateObj.toISOString().split('T')[0];
+                    const currentYear = viewMonth.getFullYear();
+                    const currentMonth = viewMonth.getMonth();
+                    
+                    const minMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                    const maxMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                    
+                    const isMinMonth = currentYear === minMonth.getFullYear() && currentMonth === minMonth.getMonth();
+                    const isMaxMonth = currentYear === maxMonth.getFullYear() && currentMonth === maxMonth.getMonth();
+
+                    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+                    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+                    const startingDayOfWeek = firstDayOfMonth.getDay();
+                    
+                    const days = [];
+                    // Padding for previous month
+                    for (let i = 0; i < startingDayOfWeek; i++) {
+                      days.push(<div key={`empty-${i}`} className="h-10"></div>);
+                    }
+                    
+                    for (let d = 1; d <= daysInMonth; d++) {
+                      const dateObj = new Date(currentYear, currentMonth, d);
+                      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      const isPast = new Date(currentYear, currentMonth, d, 23, 59, 59) < today;
+                      const isAvailable = isDayAvailable(dateStr, availabilities);
+                      const isSelected = date === dateStr;
+                      
+                      days.push(
+                        <button
+                          key={d}
+                          type="button"
+                          disabled={isPast || !isAvailable}
+                          onClick={() => { setDate(dateStr); setTime(''); }}
+                          className={`h-10 w-full flex items-center justify-center rounded-lg text-sm transition-all duration-200 ${
+                            isSelected ? 'bg-stone-800 text-white shadow-md scale-105 z-10' 
+                            : isPast ? 'text-stone-300 cursor-not-allowed opacity-50'
+                            : isAvailable ? 'bg-white text-stone-700 hover:border-stone-400 border border-stone-200 hover:shadow-sm'
+                            : 'bg-stone-50 text-stone-300 cursor-not-allowed border border-dashed border-stone-300'
+                          }`}
+                        >
+                          {d}
+                        </button>
+                      );
+                    }
+                    
                     return (
-                      <div className="relative w-full cursor-pointer">
-                        <input 
-                          type="date" 
-                          min={minDateStr} 
-                          max={maxDateStr} 
-                          value={date} 
-                          onChange={e=>{setDate(e.target.value); setTime('');}} 
-                          onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                          style={{ colorScheme: 'light' }}
-                        />
-                        <div className="w-full p-2 border border-stone-200 rounded-lg bg-white text-stone-800 transition flex items-center justify-between">
-                          <span className={date ? "" : "text-stone-400"}>{date ? date.replace(/-/g, '/') : '年/月/日'}</span>
-                          <CalendarIcon className="w-4 h-4 text-stone-400" />
+                      <div className="bg-stone-50/50 p-4 rounded-2xl border border-stone-200">
+                        <div className="flex items-center justify-between mb-4">
+                          <button 
+                            type="button"
+                            disabled={isMinMonth}
+                            onClick={() => {
+                              const prev = new Date(viewMonth);
+                              prev.setMonth(prev.getMonth() - 1);
+                              setViewMonth(prev);
+                            }}
+                            className={`p-1.5 rounded-full transition-colors border border-transparent shadow-sm ${
+                              isMinMonth ? 'opacity-20 cursor-not-allowed' : 'hover:bg-white hover:border-stone-200'
+                            }`}
+                          >
+                            <ChevronLeft className="w-4 h-4 text-stone-600" />
+                          </button>
+                          <span className="font-bold text-stone-800 text-sm bg-white px-4 py-1 rounded-full border border-stone-100 shadow-sm">
+                            {currentYear}年 {currentMonth + 1}月
+                          </span>
+                          <button 
+                            type="button"
+                            disabled={isMaxMonth}
+                            onClick={() => {
+                              const next = new Date(viewMonth);
+                              next.setMonth(next.getMonth() + 1);
+                              setViewMonth(next);
+                            }}
+                            className={`p-1.5 rounded-full transition-colors border border-transparent shadow-sm ${
+                              isMaxMonth ? 'opacity-20 cursor-not-allowed' : 'hover:bg-white hover:border-stone-200'
+                            }`}
+                          >
+                            <ChevronRight className="w-4 h-4 text-stone-600" />
+                          </button>
                         </div>
+                        <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                          {['日', '一', '二', '三', '四', '五', '六'].map(w => (
+                            <div key={w} className="text-[10px] font-bold text-stone-400 uppercase tracking-widest py-1">
+                              {w}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-7 gap-1">
+                          {days}
+                        </div>
+                        {date && (
+                          <div className="mt-4 p-2 bg-stone-800 text-white text-[11px] rounded-lg flex items-center justify-center font-bold animate-in fade-in slide-in-from-bottom-1">
+                            已選擇預約日期：{date.replace(/-/g, '/')}
+                          </div>
+                        )}
+                        {!date && (
+                          <p className="text-[10px] text-stone-400 text-center mt-4">＊點選下方有底色之日期以選擇預約時間。</p>
+                        )}
                       </div>
                     );
                   })()}
                   
                   {date && (
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-4 gap-2 pt-2 animate-in fade-in zoom-in-95 duration-300">
                       {ALL_TIME_SLOTS.map(t => {
-                        const available = isSlotAvailable(date, t, totalDuration, allOrders, member?.id, therapistPref);
+                        const available = isSlotAvailable(date, t, totalDuration, allOrders, member?.id, therapistPref, availabilities);
                         return (
                           <button
                             key={t}
                             disabled={!available}
                             onClick={() => setTime(t)}
-                            className={`py-2 text-sm rounded border transition flex flex-col items-center justify-center ${
-                              time === t ? 'bg-stone-800 text-white border-stone-800' 
-                              : available ? 'bg-white text-stone-700 border-stone-200 hover:border-stone-400' 
-                              : 'bg-stone-100 text-stone-300 border-stone-100 cursor-not-allowed'
+                            className={`py-2 text-sm rounded-xl border transition-all duration-200 flex flex-col items-center justify-center ${
+                              time === t ? 'bg-stone-800 text-white border-stone-800 shadow-md transform scale-[1.02]' 
+                              : available ? 'bg-white text-stone-700 border-stone-200 hover:border-stone-400 hover:shadow-sm' 
+                              : 'bg-stone-50 text-stone-300 border-stone-100 cursor-not-allowed opacity-60'
                             }`}
                           >
-                            <span>{t}</span>
-                            {!available && <span className="text-[10px] mt-0.5">已約滿</span>}
+                            <span className="font-bold">{t}</span>
+                            {!available && <span className="text-[9px] mt-0.5 font-medium">已約滿</span>}
                           </button>
                         );
                       })}
                     </div>
                   )}
-                  {!date && <p className="text-sm text-stone-400">請先選擇日期</p>}
                 </div>
               </section>
 
               {/* Course Selection */}
               <section>
                  <h3 className="text-lg text-stone-800 mb-1 flex items-center"><User className="w-5 h-5 mr-2 text-stone-400"/> 再選擇想預約的服務項目(可複選)</h3>
-                 <p className="text-xs text-stone-500 mb-3 bg-amber-50/50 p-2 rounded-lg border border-amber-100">
+                 <p className="text-xs text-amber-800 mb-4 bg-amber-50 p-3 rounded-xl border border-amber-100">
                    ＊小提醒：如果想規劃「局部舒壓」項目，因為局部舒壓為短時間重點部位加強，如需更多服務只可搭配「芳療升級(芳療油推)」、「運動按摩(晴空)」或是「InBody量測與解說」哦！
                  </p>
                  <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
@@ -563,13 +815,35 @@ export default function Frontend() {
                       if (hasLocal) isDisabled = true;
                     }
 
+                    // User requested: Mark cannot do Oil Massage
+                    if (therapistPref.includes('Mark') && (course.name.includes('芳療油推'))) {
+                      isDisabled = true;
+                    }
+
                     return (
-                     <div key={course.id} className={`p-3 border rounded-lg transition flex justify-between items-center ${isDisabled ? 'opacity-40 cursor-not-allowed bg-stone-50 border-stone-100' : isSelected ? 'border-stone-800 bg-stone-50/80 shadow-sm cursor-pointer' : 'border-stone-200 hover:border-stone-400 bg-white cursor-pointer'}`} onClick={() => { if (!isDisabled) addToCart(course.id); }}>
+                     <div 
+                      key={course.id} 
+                      className={`p-3 border rounded-lg transition flex justify-between items-center ${
+                        isDisabled || (course.name.includes('芳療油推') || course.name.includes('筋膜刀') ? selectedCount >= 2 : false)
+                        ? 'opacity-40 cursor-not-allowed bg-stone-50 border-stone-100' 
+                        : isSelected ? 'border-stone-800 bg-stone-50/80 shadow-sm cursor-pointer' 
+                        : 'border-stone-200 hover:border-stone-400 bg-white cursor-pointer'
+                      }`} 
+                      onClick={() => { 
+                        if (!isDisabled) {
+                          if ((course.name.includes('芳療油推') || course.name.includes('筋膜刀')) && selectedCount >= 2) return;
+                          addToCart(course.id); 
+                        }
+                      }}
+                     >
                        <div>
                          <p className="text-xs text-stone-400 mb-1">{course.category}</p>
                          <p className="font-medium text-stone-700 flex items-center gap-2">
                            {course.name}
                            {isSelected && <span className="bg-stone-800 text-stone-50 text-[10px] px-2 py-0.5 rounded-full">{selectedCount}</span>}
+                           {(course.name.includes('芳療油推') || course.name.includes('筋膜刀')) && selectedCount >= 2 && (
+                             <span className="text-[10px] text-red-500 font-normal ml-1">已達預約上限</span>
+                           )}
                          </p>
                        </div>
                        <div className="text-right">
@@ -610,9 +884,15 @@ export default function Frontend() {
                            </div>
                            
                            {course.allowUpgrade && (
-                             <label className="flex items-center mt-2 text-xs text-stone-600 bg-stone-50 p-2 rounded border border-stone-100 cursor-pointer">
-                               <input type="checkbox" checked={c.isUpgrade} onChange={e=>toggleUpgrade(c.id, e.target.checked)} className="mr-2" />
-                               加購 $200 升級芳療油推/筋膜刀
+                             <label className={`flex items-center mt-2 text-xs p-2 rounded border border-stone-100 transition ${therapistPref.includes('Mark') ? 'opacity-40 cursor-not-allowed bg-stone-100' : 'cursor-pointer bg-stone-50 text-stone-600'}`}>
+                               <input 
+                                 type="checkbox" 
+                                 checked={c.isUpgrade} 
+                                 disabled={therapistPref.includes('Mark')}
+                                 onChange={e=>toggleUpgrade(c.id, e.target.checked)} 
+                                 className="mr-2" 
+                               />
+                               加購 $200 升級芳療油推/筋膜刀 {therapistPref.includes('Mark') && '(Mark 不提供此項)'}
                              </label>
                            )}
                         </div>
@@ -631,28 +911,16 @@ export default function Frontend() {
                       {time && (() => {
                         const arriveMins = timeToMins(time) - 15;
                         const arriveTimeStr = minsToTime(arriveMins < 0 ? 0 : arriveMins);
-                        return <p className="text-xs text-amber-700 mt-2 bg-amber-50 p-2 rounded-lg border border-amber-100 inline-block">✨ 歡迎於 {arriveTimeStr} 到店沐浴更衣準備按摩。</p>;
+                        return <p className="text-xs text-amber-800 mt-2 bg-amber-50 p-3 rounded-xl border border-amber-100 inline-block">✨ 歡迎於 {arriveTimeStr} 到店沐浴更衣準備按摩。</p>;
                       })()}
                     </div>
                   )}
                   
-                  <div className="flex justify-between text-sm text-stone-600 mb-2">
-                    <span className="mt-1">安排按摩師</span>
-                    <select 
-                      value={therapistPref} 
-                      onChange={e=>setTherapistPref(e.target.value as TherapistPreference)} 
-                      disabled={hasFemaleExclusive}
-                      className="p-1 border border-stone-200 rounded bg-stone-50 text-stone-700 focus:outline-none"
-                    >
-                      {THERAPISTS.map(t => {
-                        const available = isTherapistAvailable(t);
-                        return (
-                          <option key={t} value={t} disabled={!available} className={!available ? 'text-stone-300' : ''}>
-                            {t} {!available ? '(此時段已有約)' : ''}
-                          </option>
-                        );
-                      })}
-                    </select>
+                  <div className="pt-1">
+                    <div className="flex justify-between text-sm text-stone-600 border-b border-stone-100 pb-2 mb-2">
+                       <span>預約按摩師</span>
+                       <span className="font-medium text-stone-800">{therapistPref}</span>
+                    </div>
                   </div>
 
                   <div className="flex justify-between text-sm text-stone-600 border-t border-stone-100 pt-2">
