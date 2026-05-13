@@ -3,7 +3,19 @@ import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 
 export type MemberLevel = '一般' | '金卡' | '黑卡';
 export type Gender = '男' | '女';
-export type TherapistPreference = '不指定按摩師' | '阿翰(男)' | 'Ricky(男)' | 'Kenny(男)' | 'Mark(男)' | '男按摩師即可' | 'Alice(女)' | 'Kelly(女)' | 'Miki(女)' | '女按摩師即可' | '不指定' | '阿翰' | 'Ricky' | 'Kelly' | 'Kenny' | 'Mark' | '男按摩師' | '女按摩師';
+export type TherapistPreference = '不指定按摩師' | '阿翰' | 'Ricky' | 'Kenny' | 'Mark' | '男按摩師即可' | 'Alice' | 'Kelly' | 'Miki' | '女按摩師即可' | '不指定' | '男按摩師' | '女按摩師';
+
+export interface TimeSlot {
+  start: string; // "HH:mm"
+  end: string;   // "HH:mm"
+}
+
+export interface TherapistAvailability {
+  id: string; // therapistName_date
+  therapistName: string;
+  date: string; // "YYYY-MM-DD"
+  slots: TimeSlot[];
+}
 
 export interface Member {
   id: string; // phone is used as ID
@@ -19,6 +31,9 @@ export interface Member {
   membershipStartDate?: string;
   membershipEndDate?: string;
   createdAt: number;
+  role?: 'member' | 'therapist' | 'admin';
+  password?: string;
+  therapistName?: string; // Links member account to a specific therapist name
 }
 
 export interface OrderItem {
@@ -52,7 +67,7 @@ export interface Order {
 }
 
 export const COURSES = [
-  { id: 'a1', category: '經絡按摩', name: '全身指壓', time: 30, price: 600, allowUpgrade: false },
+  { id: 'a1', category: '經絡按摩', name: '全身按摩', time: 60, price: 1200, allowUpgrade: false },
   { id: 'a2', category: '芳療升級(悠風)', name: '芳療油推', time: 30, price: 700, allowUpgrade: false },
   { id: 'a3', category: '運動按摩(晴空)', name: '筋膜刀', time: 30, price: 900, allowUpgrade: false },
   { id: 'q1', category: '局部舒壓(霧羽)', name: '頭頸指壓', time: 30, price: 600, allowUpgrade: false },
@@ -102,7 +117,7 @@ export const db = {
     }
   },
 
-  updateMemberInfo: (oldId: string, name: string, gender: Gender, birthday: string, phone: string, level: MemberLevel, lineId?: string, referredBy?: string, referredMonth?: string, primaryTherapist?: string, membershipStartDate?: string, membershipEndDate?: string) => {
+  updateMemberInfo: (oldId: string, name: string, gender: Gender, birthday: string, phone: string, level: MemberLevel, lineId?: string, referredBy?: string, referredMonth?: string, primaryTherapist?: string, membershipStartDate?: string, membershipEndDate?: string, role?: 'member' | 'therapist' | 'admin', password?: string, therapistName?: string) => {
     const members = db.getMembers();
     const idx = members.findIndex(x => x.id === oldId);
     if (idx >= 0) {
@@ -114,6 +129,10 @@ export const db = {
       if (primaryTherapist !== undefined) updatedMember.primaryTherapist = primaryTherapist;
       if (membershipStartDate !== undefined) updatedMember.membershipStartDate = membershipStartDate;
       if (membershipEndDate !== undefined) updatedMember.membershipEndDate = membershipEndDate;
+      if (role !== undefined) updatedMember.role = role;
+      if (password !== undefined) updatedMember.password = password;
+      if (therapistName !== undefined) updatedMember.therapistName = therapistName;
+
       if (phone && phone !== oldId) {
         updatedMember.id = phone;
         const orders = db.getOrders();
@@ -160,6 +179,34 @@ export const db = {
     localStorage.setItem('zf_orders', JSON.stringify(orders));
     try { deleteDoc(doc(firestoreDb, 'orders', id)).catch(console.error); } catch(e){}
   },
+
+  getAvailability: (): TherapistAvailability[] => {
+    try {
+      return JSON.parse(localStorage.getItem('zf_availability') || '[]');
+    } catch {
+      return [];
+    }
+  },
+
+  saveAvailability: (a: TherapistAvailability) => {
+    const items = db.getAvailability();
+    const idx = items.findIndex(x => x.therapistName === a.therapistName && x.date === a.date);
+    if (idx >= 0) {
+      items[idx] = a;
+    } else {
+      items.push(a);
+    }
+    localStorage.setItem('zf_availability', JSON.stringify(items));
+    try { setDoc(doc(firestoreDb, 'availability', a.id), a).catch(console.error); } catch(e){}
+  },
+
+  deleteAvailability: (id: string) => {
+    let items = db.getAvailability();
+    items = items.filter(x => x.id !== id);
+    localStorage.setItem('zf_availability', JSON.stringify(items));
+    try { deleteDoc(doc(firestoreDb, 'availability', id)).catch(console.error); } catch(e){}
+  },
+
   updateOrder: (id: string, updates: Partial<Order>) => {
     let orders = db.getOrders();
     const index = orders.findIndex(o => o.id === id);
@@ -195,7 +242,7 @@ export function getBookedRanges(date: string, allOrders: Order[]) {
 
 export function sortOrderItems<T extends {name: string, duration?: number, price?: number}>(items: T[]): T[] {
   const getWeight = (name: string) => {
-    if (name.includes('指壓') || name.includes('豐胸') || name.includes('小顏') || name.includes('局部')) return 1;
+    if (name.includes('指壓') || name.includes('按摩') || name.includes('豐胸') || name.includes('小顏') || name.includes('局部')) return 1;
     if (name.includes('油推')) return 2;
     if (name.includes('筋膜刀')) return 3;
     if (name.includes('InBody')) return 4;
@@ -204,9 +251,88 @@ export function sortOrderItems<T extends {name: string, duration?: number, price
   return [...items].sort((a, b) => getWeight(a.name) - getWeight(b.name));
 }
 
-export function isSlotAvailable(date: string, timeStr: string, requiredDuration: number, allOrders: Order[], memberId?: string, therapistPref?: string) {
+export function isSlotAvailable(date: string, timeStr: string, requiredDuration: number, allOrders: Order[], memberId?: string, therapistPref?: string, availabilities: TherapistAvailability[] = []) {
   if (!date || !timeStr) return false;
   const startMins = timeToMins(timeStr);
+  const finishMins = startMins + requiredDuration;
+
+  // Check therapists' schedules if a specific therapist is requested
+  if (therapistPref && therapistPref !== '不指定按摩師' && !therapistPref.includes('即可')) {
+      const avail = availabilities.find(a => a.therapistName === therapistPref && a.date === date);
+      if (!avail || !avail.slots || avail.slots.length === 0) return false; // Not scheduled at all
+      
+      const isInSlot = avail.slots.some(s => {
+          const sStart = timeToMins(s.start);
+          const sEnd = timeToMins(s.end);
+          return startMins >= sStart && finishMins <= sEnd;
+      });
+      if (!isInSlot) return false;
+  }
+  
+  // Also check if ANY therapist is available if '男按摩師即可' or '女按摩師即可' is selected
+  if (therapistPref && (therapistPref === '男按摩師即可' || therapistPref === '女按摩師即可')) {
+      const isMale = therapistPref.startsWith('男');
+      const compatibleTherapists = isMale 
+        ? ['阿翰', 'Kenny', 'Mark', 'Ricky']
+        : ['Alice', 'Kelly', 'Miki'];
+      
+      let anyoneAvailable = false;
+      for (const tName of compatibleTherapists) {
+          const avail = availabilities.find(a => a.therapistName === tName && a.date === date);
+          if (avail && avail.slots) {
+              const isInSlot = avail.slots.some(s => {
+                  const sStart = timeToMins(s.start);
+                  const sEnd = timeToMins(s.end);
+                  return startMins >= sStart && finishMins <= sEnd;
+              });
+              if (isInSlot) {
+                  // Must also not have an overlapping order
+                  const overlaps = allOrders.some(o => {
+                      if (o.date !== date || o.status === 'cancelled' || o.therapistPreference !== tName) return false;
+                      const oStart = timeToMins(o.time || '00:00');
+                      const oEnd = oStart + (o.totalDuration || 0) + 30;
+                      return startMins < oEnd && (startMins + requiredDuration + 30) > oStart;
+                  });
+                  if (!overlaps) {
+                      anyoneAvailable = true;
+                      break;
+                  }
+              }
+          }
+      }
+      if (!anyoneAvailable) return false;
+  }
+
+  // Also check if ANY therapist is available if '不指定按摩師' is selected
+  if (therapistPref === '不指定按摩師') {
+      const allTherapists = ['阿翰', 'Kenny', 'Mark', 'Ricky', 'Alice', 'Kelly', 'Miki'];
+      
+      let anyoneAvailable = false;
+      for (const tName of allTherapists) {
+          const avail = availabilities.find(a => a.therapistName === tName && a.date === date);
+          if (avail && avail.slots) {
+              const isInSlot = avail.slots.some(s => {
+                  const sStart = timeToMins(s.start);
+                  const sEnd = timeToMins(s.end);
+                  return startMins >= sStart && finishMins <= sEnd;
+              });
+              if (isInSlot) {
+                  // Must also not have an overlapping order
+                  const overlaps = allOrders.some(o => {
+                      if (o.date !== date || o.status === 'cancelled' || o.therapistPreference !== tName) return false;
+                      const oStart = timeToMins(o.time || '00:00');
+                      const oEnd = oStart + (o.totalDuration || 0) + 30;
+                      return startMins < oEnd && (startMins + requiredDuration + 30) > oStart;
+                  });
+                  if (!overlaps) {
+                      anyoneAvailable = true;
+                      break;
+                  }
+              }
+          }
+      }
+      if (!anyoneAvailable) return false;
+  }
 
   const today = new Date();
   const slotDateObj = new Date(date);
@@ -222,7 +348,6 @@ export function isSlotAvailable(date: string, timeStr: string, requiredDuration:
     }
   }
 
-  const finishMins = startMins + requiredDuration;
   if (finishMins > (22 * 60)) return false; // Ensure service ends by 22:00
   
   const endMins = startMins + requiredDuration + 30; // +30 for the overlap check buffer
@@ -258,6 +383,11 @@ export function isSlotAvailable(date: string, timeStr: string, requiredDuration:
       }
   }
   return true;
+}
+
+export function isDayAvailable(date: string, availabilities: TherapistAvailability[] = []) {
+  if (!date) return false;
+  return availabilities.some(a => a.date === date && a.slots && a.slots.length > 0);
 }
 
 export const ALL_TIME_SLOTS: string[] = [];
