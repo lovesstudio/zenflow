@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { db, Member, Order, MemberLevel, timeToMins, minsToTime, Gender, ALL_TIME_SLOTS, sortOrderItems } from './store';
-import { Trash2, TrendingUp, Users, Calendar, DollarSign, Clock, Search, CheckCircle, XCircle, CalendarDays, Lock, LogOut, ChevronRight } from 'lucide-react';
+import { db, Member, Order, MemberLevel, timeToMins, minsToTime, Gender, ALL_TIME_SLOTS, sortOrderItems, TherapistAvailability } from './store';
+import { Trash2, TrendingUp, Users, Calendar, DollarSign, Clock, Search, CheckCircle, XCircle, CalendarDays, Lock, LogOut, ChevronRight, ChevronLeft, Plus, User, X } from 'lucide-react';
 
 const getZodiacSign = (dateStr: string) => {
   if (!dateStr || !dateStr.includes('-')) return '';
@@ -23,16 +23,43 @@ const getAge = (dateStr: string) => {
   return age > 0 ? `${age}歲` : '';
 };
 
-const THERAPISTS_W_GENDER = ['阿翰(男)', 'Ricky(男)', 'Kenny(男)', 'Mark(男)', '男按摩師即可', 'Alice(女)', 'Kelly(女)', 'Miki(女)', '女按摩師即可'];
+const THERAPISTS_W_GENDER = ['男按摩師即可', '女按摩師即可', '阿翰', 'Alice', 'Kenny', 'Kelly', 'Mark', 'Miki', 'Ricky'];
 const ALL_THERAPIST_CATEGORIES = ['不指定按摩師', ...THERAPISTS_W_GENDER];
 
+const consolidateAvailability = (selectedStartTimes: string[]): {start: string, end: string}[] => {
+  if (selectedStartTimes.length === 0) return [];
+  
+  const minutes = selectedStartTimes.map(timeToMins).sort((a, b) => a - b);
+  const ranges: {start: string, end: string}[] = [];
+  
+  if (minutes.length === 0) return [];
+
+  let currentStart = minutes[0];
+  let currentEnd = minutes[0] + 30;
+  
+  for (let i = 1; i < minutes.length; i++) {
+    if (minutes[i] === currentEnd) {
+      currentEnd = minutes[i] + 30;
+    } else {
+      ranges.push({ start: minsToTime(currentStart), end: minsToTime(currentEnd) });
+      currentStart = minutes[i];
+      currentEnd = minutes[i] + 30;
+    }
+  }
+  ranges.push({ start: minsToTime(currentStart), end: minsToTime(currentEnd) });
+  
+  return ranges;
+};
+
 export default function Backend() {
-  const [isAdminAuthed, setIsAdminAuthed] = useState(false);
-  const [adminPin, setAdminPin] = useState('');
+  const [authedUser, setAuthedUser] = useState<{ role: 'admin' | 'therapist', name?: string, phone?: string } | null>(null);
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPass, setLoginPass] = useState('');
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [tab, setTab] = useState<'orders' | 'members' | 'calendar'>('calendar');
+  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const [tab, setTab] = useState<'orders' | 'members' | 'calendar' | 'therapist'>('calendar');
   const [orderViewMode, setOrderViewMode] = useState<'list' | 'byTherapist'>('list');
   const [orderMonth, setOrderMonth] = useState(new Date().toISOString().slice(0, 7));
   const [viewingTherapistStats, setViewingTherapistStats] = useState<{therapist: string, orders: Order[]} | null>(null);
@@ -40,32 +67,90 @@ export default function Backend() {
   const [logMonthFilter, setLogMonthFilter] = useState<string>('');
   const [bonusModal, setBonusModal] = useState<{ therapist: string, level: MemberLevel, month: string } | null>(null);
 
+  const [selectedTherapistPortal, setSelectedTherapistPortal] = useState<string>('');
+  const [availabilities, setAvailabilities] = useState<any[]>([]);
+  const [editingAvailability, setEditingAvailability] = useState<{ date: string, slots: {start: string, end: string}[] } | null>(null);
+  const [viewingAppts, setViewingAppts] = useState<'today' | 'all' | null>(null);
+  const [copyTargetDates, setCopyTargetDates] = useState<string[]>([]);
+  const [showCopyCalendar, setShowCopyCalendar] = useState(false);
+  const [copyMonthView, setCopyMonthView] = useState(new Date());
+
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
   const [rescheduleTime, setRescheduleTime] = useState('');
 
   const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm?: () => void} | null>(null);
+  const [showFormulaIds, setShowFormulaIds] = useState<Set<string>>(new Set());
+
+  const toggleFormula = (id: string) => {
+    setShowFormulaIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
-    if (localStorage.getItem('zf_admin_auth') === 'true') {
-      setIsAdminAuthed(true);
+    const saved = localStorage.getItem('zf_authed_user');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setAuthedUser(parsed);
+      if (parsed.role === 'therapist') {
+        setTab('therapist');
+        if (parsed.name) setSelectedTherapistPortal(parsed.name);
+      }
     }
   }, []);
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (authedUser?.role === 'therapist' && authedUser.name) {
+      setTab('therapist');
+      setSelectedTherapistPortal(authedUser.name);
+    }
+  }, [authedUser]);
+
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPin === '123456') {
-      localStorage.setItem('zf_admin_auth', 'true');
-      setIsAdminAuthed(true);
-      setAdminPin('');
+    const phone = loginPhone.trim();
+    const pass = loginPass.trim();
+
+    if (!pass) {
+      setConfirmAction({ message: '請輸入密碼' });
+      return;
+    }
+
+    // Admin check (hardcoded fallback OR database check)
+    const adminAccount = members.find(m => m.id === phone && m.password === pass && m.role === 'admin');
+    if (adminAccount || ((phone === 'admin' || phone === '') && pass === '123456')) {
+      const user = { role: 'admin' as const };
+      setAuthedUser(user);
+      localStorage.setItem('zf_authed_user', JSON.stringify(user));
+      setLoginPass('');
+      setLoginPhone('');
+      return;
+    }
+
+    // Therapist login
+    const member = members.find(m => m.id === phone && m.password === pass && m.role === 'therapist');
+    if (member) {
+      const user = { role: 'therapist' as const, name: member.therapistName, phone: member.id };
+      setAuthedUser(user);
+      localStorage.setItem('zf_authed_user', JSON.stringify(user));
+      setTab('therapist');
+      if (member.therapistName) {
+        setSelectedTherapistPortal(member.therapistName);
+      }
+      setLoginPass('');
+      setLoginPhone('');
     } else {
-      setConfirmAction({ message: '密碼錯誤' });
+      setConfirmAction({ message: '帳號或密碼錯誤，請重新輸入。' });
     }
   };
 
-  const handleAdminLogout = () => {
-    localStorage.removeItem('zf_admin_auth');
-    setIsAdminAuthed(false);
+  const handleLogout = () => {
+    localStorage.removeItem('zf_authed_user');
+    setAuthedUser(null);
   };
 
   const handleShare = (o: Order) => {
@@ -81,8 +166,11 @@ export default function Backend() {
       .join('\n');
 
     const noteText = o.note ? `\n⭐當日服務注意事項：${o.note}` : '';
+    const discomfortText = o.discomfortAreas && o.discomfortAreas.length > 0 
+      ? `\n⚠️今日不適部位：${o.discomfortAreas.join(', ')}` 
+      : '';
     const dateStr = o.date.replace(/-/g, '/');
-    const shareText = `【ZEN FLOW 預約通知】\n📆日期：${dateStr}\n⏰時間：${o.time}~${endTime}(${o.totalDuration}分鐘)\n😃客人：${m?.name || '未知顧客'} (${m?.gender || '女'})\n🔹預約項目：\n${itemsText}${noteText}`;
+    const shareText = `【ZEN FLOW 預約通知】\n📆日期：${dateStr}\n⏰時間：${o.time}~${endTime}(${o.totalDuration}分鐘)\n😃客人：${m?.name || '未知顧客'} (${m?.gender || '女'})\n🔹預約項目：\n${itemsText}${noteText}${discomfortText}`;
     
     // Attempt to copy to clipboard
     navigator.clipboard.writeText(shareText).then(() => {
@@ -106,19 +194,25 @@ export default function Backend() {
   const [editPrimaryTherapist, setEditPrimaryTherapist] = useState('');
   const [editMembershipStartDate, setEditMembershipStartDate] = useState('');
   const [editMembershipEndDate, setEditMembershipEndDate] = useState('');
+  const [editRole, setEditRole] = useState<'member' | 'therapist' | 'admin'>('member');
+  const [editTherapistName, setEditTherapistName] = useState('');
+  const [editPassword, setEditPassword] = useState('');
 
   // Polling to simulate real-time updates from LocalStorage
   useEffect(() => {
     const fetchData = () => {
       setOrders(db.getOrders().sort((a,b) => b.createdAt - a.createdAt));
-      // Only update members list if we're not currently editing a note, to avoid losing focus
+      // Use setMembers sparingly to avoid losing local focus/state
+      const freshMembers = db.getMembers().sort((a,b) => (b.createdAt - a.createdAt) || b.id.localeCompare(a.id));
       setMembers(prev => {
-        const next = db.getMembers().sort((a,b) => b.createdAt - a.createdAt);
-        return next;
+        // Deep compare or simple length/first item check to avoid unnecessary re-renders
+        if (JSON.stringify(prev) === JSON.stringify(freshMembers)) return prev;
+        return freshMembers;
       });
+      setAvailabilities(db.getAvailability());
     };
     fetchData();
-    const interval = setInterval(fetchData, 1000);
+    const interval = setInterval(fetchData, 2000); // Relaxed polling to reduce CPU/flicker
     return () => clearInterval(interval);
   }, []);
 
@@ -181,7 +275,7 @@ export default function Backend() {
 
   const handleLevelChange = (id: string, lvl: MemberLevel) => {
     db.updateMemberLevel(id, lvl);
-    setMembers(db.getMembers());
+    setMembers(prev => prev.map(m => m.id === id ? { ...m, level: lvl } : m));
   };
 
   const openCustomerModal = (m: Member | undefined) => {
@@ -222,6 +316,9 @@ export default function Backend() {
       setEditPrimaryTherapist(m.primaryTherapist || '');
       setEditMembershipStartDate(m.membershipStartDate || '');
       setEditMembershipEndDate(m.membershipEndDate || '');
+      setEditRole(m.role || 'member');
+      setEditTherapistName(m.therapistName || '');
+      setEditPassword(m.password || '');
     }
   };
 
@@ -232,6 +329,9 @@ export default function Backend() {
 
   const handleInfoSave = (oldId: string, overrides: any = {}) => {
     const finalPhone = overrides.phone ?? editPhone;
+    const m = members.find(x => x.id === oldId);
+    if (!m) return;
+
     db.updateMemberInfo(
       oldId, 
       overrides.name ?? editName, 
@@ -244,40 +344,65 @@ export default function Backend() {
       overrides.referredMonth ?? editReferredMonth,
       overrides.primaryTherapist ?? editPrimaryTherapist,
       overrides.membershipStartDate ?? editMembershipStartDate,
-      overrides.membershipEndDate ?? editMembershipEndDate
+      overrides.membershipEndDate ?? editMembershipEndDate,
+      overrides.role ?? editRole,
+      overrides.password ?? editPassword,
+      overrides.therapistName ?? editTherapistName
     );
-    setMembers(db.getMembers());
+
+    // Update local state immediately without full re-fetch/sort
+    setMembers(prev => {
+      const next = prev.map(item => {
+        if (item.id === oldId) {
+          const updated = { ...item, ...overrides };
+          if (finalPhone !== oldId) updated.id = finalPhone;
+          return updated;
+        }
+        return item;
+      });
+      return next.sort((a,b) => (b.createdAt - a.createdAt) || b.id.localeCompare(a.id));
+    });
+
     if (finalPhone !== oldId) {
       setExpandedMemberId(finalPhone);
     }
   };
 
-  if (!isAdminAuthed) {
+  if (!authedUser) {
     return (
       <div className="bg-stone-50 min-h-screen text-stone-800 font-sans flex items-center justify-center p-6">
-        <form onSubmit={handleAdminLogin} className="bg-white p-8 rounded-2xl shadow-xl border border-stone-200 max-w-sm w-full animate-in zoom-in">
+        <form onSubmit={handleLogin} className="bg-white p-8 rounded-2xl shadow-xl border border-stone-200 max-w-sm w-full animate-in zoom-in">
           <div className="flex justify-center mb-6">
             <div className="p-4 bg-stone-100 text-stone-800 rounded-full">
               <Lock className="w-8 h-8" />
             </div>
           </div>
-          <h2 className="text-2xl font-medium text-center text-stone-800 mb-6 font-sans">ZEN FLOW 管理員登入</h2>
+          <h2 className="text-2xl font-medium text-center text-stone-800 mb-6 font-sans">ZEN FLOW 登入系統</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm text-stone-600 mb-2">請輸入管理員密碼</label>
+              <label className="block text-sm text-stone-600 mb-2">帳號 (手機號碼 或 admin)</label>
+              <input
+                type="text"
+                value={loginPhone}
+                onChange={e => setLoginPhone(e.target.value)}
+                className="w-full p-3 border border-stone-200 rounded-xl focus:border-stone-500 outline-none transition text-center text-lg"
+                placeholder="手機號碼 / admin"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-stone-600 mb-2">密碼</label>
               <input
                 type="password"
-                value={adminPin}
-                onChange={e => setAdminPin(e.target.value)}
+                value={loginPass}
+                onChange={e => setLoginPass(e.target.value)}
                 className="w-full p-3 border border-stone-200 rounded-xl focus:border-stone-500 outline-none transition text-center tracking-[0.5em] text-lg font-mono"
                 placeholder="••••••"
-                maxLength={6}
               />
             </div>
             <button type="submit" className="w-full py-3 bg-stone-800 text-white rounded-xl hover:bg-stone-700 transition font-medium">
-              登入後台
+              登入
             </button>
-            <p className="text-xs text-stone-400 text-center mt-4">預設密碼：123456</p>
+            <p className="text-xs text-stone-400 text-center mt-4">師傅登入請輸入會員帳號與專屬密碼</p>
           </div>
         </form>
         {confirmAction && (
@@ -300,15 +425,32 @@ export default function Backend() {
     );
   }
 
+  const isAdmin = authedUser.role === 'admin';
+
   return (
     <div className="bg-stone-50 min-h-screen text-stone-800 font-sans">
       <div className="bg-stone-900 text-stone-100 px-6 py-4 flex justify-between items-center shadow-md">
-        <h1 className="text-xl font-light tracking-wide">ZEN FLOW <span className="text-stone-400 text-sm ml-2 hidden sm:inline">管理後台</span></h1>
+        <h1 className="text-xl font-light tracking-wide">
+          ZEN FLOW 
+          <span className="text-stone-400 text-sm ml-2 hidden sm:inline">
+            {isAdmin ? '管理後台' : `${authedUser.name || '師傅'} 老師`}
+          </span>
+        </h1>
         <div className="space-x-1 flex items-center overflow-x-auto no-scrollbar">
-          <button onClick={()=>setTab('calendar')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='calendar'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>預約列表</button>
-          <button onClick={()=>setTab('orders')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='orders'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>訂單管理</button>
-          <button onClick={()=>setTab('members')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='members'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>會員系統</button>
-          <button onClick={handleAdminLogout} className="ml-2 px-3 py-2 text-stone-400 hover:text-white transition flex items-center shrink-0">
+          {isAdmin && (
+            <>
+              <button onClick={()=>setTab('calendar')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='calendar'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>預約列表</button>
+              <button onClick={()=>setTab('orders')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='orders'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>訂單管理</button>
+              <button onClick={()=>setTab('members')} className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='members'?'bg-stone-700 text-white':'text-stone-400 hover:text-white'}`}>會員系統</button>
+            </>
+          )}
+          <button 
+            onClick={() => { if(isAdmin) setTab('therapist'); }} 
+            className={`px-4 py-2 rounded-lg text-sm transition whitespace-nowrap ${tab==='therapist' ? 'bg-emerald-600 text-white' : 'text-stone-400 hover:text-white'}`}
+          >
+            {isAdmin ? '師傅專區' : `${authedUser?.name || '師傅'} 的專屬分頁`}
+          </button>
+          <button onClick={handleLogout} className="ml-2 px-3 py-2 text-stone-400 hover:text-white transition flex items-center shrink-0">
             <LogOut className="w-4 h-4 mr-1 md:hidden" />
             <span className="hidden md:inline">登出</span>
           </button>
@@ -316,28 +458,28 @@ export default function Backend() {
       </div>
 
       <div className="max-w-6xl mx-auto p-6 space-y-6">
-        {/* Dashboard Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-            <div className="p-3 bg-green-100 text-green-700 rounded-lg mr-4"><DollarSign className="w-6 h-6"/></div>
-            <div><p className="text-stone-500 text-sm">今日營業額</p><p className="text-2xl font-semibold">NT$ {todaysRevenue}</p></div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-            <div className="p-3 bg-blue-100 text-blue-700 rounded-lg mr-4"><Calendar className="w-6 h-6"/></div>
-            <div><p className="text-stone-500 text-sm">今日訂單數</p><p className="text-2xl font-semibold">{todaysOrders.length} 筆</p></div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-            <div className="p-3 bg-purple-100 text-purple-700 rounded-lg mr-4"><TrendingUp className="w-6 h-6"/></div>
-            <div><p className="text-stone-500 text-sm">累計總訂單</p><p className="text-2xl font-semibold">{orders.length} 筆</p></div>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
-            <div className="p-3 bg-amber-100 text-amber-700 rounded-lg mr-4"><Users className="w-6 h-6"/></div>
-            <div><p className="text-stone-500 text-sm">總會員數</p><p className="text-2xl font-semibold">{members.length} 人</p></div>
-          </div>
-        </div>
-
         {tab === 'calendar' && (
           <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden p-6">
+            {isAdmin && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
+                  <div className="p-3 bg-green-100 text-green-700 rounded-lg mr-4"><DollarSign className="w-6 h-6"/></div>
+                  <div><p className="text-stone-500 text-sm">今日營業額</p><p className="text-2xl font-semibold">NT$ {todaysRevenue}</p></div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
+                  <div className="p-3 bg-blue-100 text-blue-700 rounded-lg mr-4"><Calendar className="w-6 h-6"/></div>
+                  <div><p className="text-stone-500 text-sm">今日訂單數</p><p className="text-2xl font-semibold">{todaysOrders.length} 筆</p></div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
+                  <div className="p-3 bg-purple-100 text-purple-700 rounded-lg mr-4"><TrendingUp className="w-6 h-6"/></div>
+                  <div><p className="text-stone-500 text-sm">累計總訂單</p><p className="text-2xl font-semibold">{orders.length} 筆</p></div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex items-center">
+                  <div className="p-3 bg-amber-100 text-amber-700 rounded-lg mr-4"><Users className="w-6 h-6"/></div>
+                  <div><p className="text-stone-500 text-sm">總會員數</p><p className="text-2xl font-semibold">{members.length} 人</p></div>
+                </div>
+              </div>
+            )}
             <div className="flex justify-between items-center mb-6">
               <h2 className="font-medium text-stone-800 text-lg flex items-center">
                 <Calendar className="w-5 h-5 mr-2" /> 預約列表 (即將到來)
@@ -377,47 +519,62 @@ export default function Backend() {
                                       <span className="text-xs text-stone-500 font-normal mt-0.5">(總共{(o.totalDuration / 60) % 1 === 0 ? o.totalDuration/60 : (o.totalDuration/60).toFixed(1)}小時)</span>
                                     </div>
                                     
-                                    {category === '不指定按摩師' && (
-                                      <div className="mt-2 text-xs flex flex-col space-y-1 bg-amber-50 p-2 rounded-lg border border-amber-200">
-                                        <span className="text-amber-800 font-medium">分派給：</span>
-                                        <select 
-                                          className="bg-white border border-amber-200 outline-none rounded p-1 text-stone-700 cursor-pointer shadow-sm w-full"
-                                          onChange={(e) => {
-                                            if (e.target.value) {
-                                              db.updateOrder(o.id, { therapistPreference: e.target.value as any, isAssignedByShop: true });
-                                              setOrders(db.getOrders());
-                                            }
-                                          }}
-                                          value=""
-                                        >
-                                          <option value="" disabled>選擇安排</option>
-                                          {THERAPISTS_W_GENDER.map(t => (
-                                            <option key={t} value={t}>{t}</option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    )}
-                                    
-                                    {category !== '不指定按摩師' && (!o.status || o.status === 'pending') && (
-                                      <div className="mt-2 text-xs flex flex-col space-y-1 bg-stone-50 p-2 rounded-lg border border-stone-200">
-                                        <span className="text-stone-600 font-medium">改由：</span>
-                                        <select 
-                                          className="bg-white border border-stone-200 outline-none rounded p-1 text-stone-700 cursor-pointer shadow-sm w-full"
-                                          onChange={(e) => {
-                                            if (e.target.value) {
-                                              db.updateOrder(o.id, { therapistPreference: e.target.value as any });
-                                              setOrders(db.getOrders());
-                                            }
-                                          }}
-                                          value=""
-                                        >
-                                          <option value="" disabled>選擇代班</option>
-                                          {THERAPISTS_W_GENDER.map(t => (
-                                            t !== category && <option key={t} value={t}>{t} 代班</option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    )}
+                                    <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                                      {category === '不指定按摩師' && (
+                                        <div className="text-[10px] flex flex-col space-y-1 bg-amber-50 p-1.5 rounded border border-amber-200 min-w-[100px] shrink-0">
+                                          <span className="text-amber-800 font-medium">分派給：</span>
+                                          <select 
+                                            className="bg-white border border-amber-200 outline-none rounded p-0.5 text-stone-700 cursor-pointer shadow-sm w-full"
+                                            onChange={(e) => {
+                                              if (e.target.value) {
+                                                db.updateOrder(o.id, { therapistPreference: e.target.value as any, isAssignedByShop: true });
+                                                setOrders(db.getOrders());
+                                              }
+                                            }}
+                                            value=""
+                                          >
+                                            <option value="" disabled>選擇安排</option>
+                                            {THERAPISTS_W_GENDER.map(t => (
+                                              <option key={t} value={t}>{t}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      {category !== '不指定按摩師' && (!o.status || o.status === 'pending') && (
+                                        <div className="text-[10px] flex flex-col space-y-1 bg-stone-50 p-1.5 rounded border border-stone-200 min-w-[100px] shrink-0">
+                                          <span className="text-stone-600 font-medium whitespace-nowrap">改由：</span>
+                                          <select 
+                                            className="bg-white border border-stone-200 outline-none rounded p-0.5 text-stone-700 cursor-pointer shadow-sm w-full"
+                                            onChange={(e) => {
+                                              if (e.target.value) {
+                                                db.updateOrder(o.id, { therapistPreference: e.target.value as any });
+                                                setOrders(db.getOrders());
+                                              }
+                                            }}
+                                            value=""
+                                          >
+                                            <option value="" disabled>選擇代班</option>
+                                            {THERAPISTS_W_GENDER.map(t => (
+                                              t !== category && <option key={t} value={t}>{t} 代班</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      )}
+                                      
+                                      <textarea
+                                        className="flex-1 text-[11px] p-2 border border-stone-200 rounded resize-none focus:outline-none focus:border-stone-500 bg-white placeholder:text-stone-300 text-stone-700 h-[52px] shadow-sm"
+                                        placeholder="當日服務注意事項..."
+                                        rows={2}
+                                        defaultValue={o.note || ''}
+                                        onBlur={(e) => {
+                                          if (e.target.value !== o.note) {
+                                            db.updateOrder(o.id, { note: e.target.value });
+                                            setOrders(db.getOrders());
+                                          }
+                                        }}
+                                      />
+                                    </div>
                                   </div>
                                   <div className="mt-1">
                                     <div className="flex items-center space-x-3 mb-2 flex-wrap gap-y-2">
@@ -485,19 +642,33 @@ export default function Backend() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="mt-3 pt-3 border-t border-stone-100">
-                                <textarea
-                                  className="w-full text-xs p-2 border border-stone-200 rounded resize-none focus:outline-none focus:border-stone-500 bg-stone-50 placeholder:text-stone-400 text-stone-700 flex-1"
-                                  placeholder="當日服務注意事項..."
-                                  rows={1}
-                                  defaultValue={o.note || ''}
-                                  onBlur={(e) => {
-                                    if (e.target.value !== o.note) {
-                                      db.updateOrder(o.id, { note: e.target.value });
-                                      setOrders(db.getOrders());
-                                    }
-                                  }}
-                                />
+                              <div className="mt-2 pt-2 border-t border-stone-100">
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                  <label className="text-[11px] text-stone-400 mb-0 uppercase tracking-wider whitespace-nowrap">今日不適部位：</label>
+                                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                    {['頭','頸','肩','上背','下背','臀','大腿','小腿','足','胸','腹','手'].map(area => (
+                                      <label key={area} className="flex items-center text-[12px] text-stone-800 cursor-pointer hover:bg-stone-100 px-1 rounded transition whitespace-nowrap">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={o.discomfortAreas?.includes(area) || false} 
+                                          onChange={e => {
+                                            const current = o.discomfortAreas || [];
+                                            let updated = [];
+                                            if (e.target.checked) {
+                                              updated = [...current, area];
+                                            } else {
+                                              updated = current.filter(x => x !== area);
+                                            }
+                                            db.updateOrder(o.id, { discomfortAreas: updated });
+                                            setOrders(db.getOrders());
+                                          }}
+                                          className="w-3.5 h-3.5 mr-1 accent-stone-800" 
+                                        />
+                                        {area}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           );
@@ -537,16 +708,16 @@ export default function Backend() {
                 <table className="w-full text-left text-sm min-w-[1000px]">
                   <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
                     <tr>
-                      <th className="pl-6 pr-2 py-3 font-medium whitespace-nowrap">服務按摩師</th>
+                      <th className="pl-6 pr-2 py-3 font-medium w-[60px] text-center">完成</th>
                       <th className="px-2 py-3 font-medium">預約日期及時間</th>
                       <th className="px-2 py-3 font-medium whitespace-nowrap">總時長</th>
-                      <th className="px-2 py-3 font-medium w-[60px] text-center">完成</th>
                       <th className="px-5 py-3 font-medium">顧客及電話</th>
-                      <th className="px-5 py-3 font-medium w-[184px]">服務內容</th>
-                      <th className="px-5 py-3 font-medium whitespace-nowrap">結帳金額</th>
-                      <th className="px-5 py-3 font-medium whitespace-nowrap">付款方式</th>
-                      <th className="px-5 py-3 font-medium">服務備註</th>
-                      <th className="px-5 py-3 font-medium">刪除</th>
+                      <th className="px-2 py-3 font-medium whitespace-nowrap">服務按摩師</th>
+                      <th className="px-5 py-3 font-medium w-[120px]">服務內容</th>
+                      <th className="px-2 py-3 font-medium whitespace-nowrap">結帳金額</th>
+                      <th className="px-2 py-3 font-medium whitespace-nowrap">付款方式</th>
+                      <th className="px-2 py-3 font-medium min-w-[180px]">服務備註</th>
+                      <th className="px-5 py-3 font-medium text-right">刪除</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
@@ -566,16 +737,7 @@ export default function Backend() {
 
                       return (
                       <tr key={o.id} className={`hover:bg-stone-50/50 transition ${o.status === 'cancelled' || isPast || o.status === 'completed' ? 'opacity-60 bg-stone-50/50' : ''}`}>
-                        <td className="pl-6 pr-2 py-4 text-stone-600 font-medium">{o.therapistPreference || '不指定按摩師'}</td>
-                        <td className="px-2 py-4">
-                          <div className="font-medium text-stone-800 flex items-center gap-2">
-                            {formattedDate} 
-                            {o.status === 'cancelled' && <span className="bg-red-100 text-red-600 text-[10px] px-1.5 py-0.5 rounded border border-red-200">已取消</span>}
-                          </div>
-                          <div className="text-stone-500">{o.time}{endTimeStr ? `~${endTimeStr}` : ''}</div>
-                        </td>
-                        <td className="px-2 py-4 text-stone-600 whitespace-nowrap">{durationHoursDisplay}小時</td>
-                        <td className="px-5 py-4 text-center">
+                        <td className="pl-6 pr-2 py-4 text-center">
                           <input 
                             type="checkbox" 
                             checked={o.status === 'completed'} 
@@ -584,6 +746,14 @@ export default function Backend() {
                             disabled={o.status === 'cancelled'}
                           />
                         </td>
+                        <td className="px-2 py-4">
+                          <div className="font-medium text-stone-800">
+                            {formattedDate} 
+                          </div>
+                          <div className="text-stone-500">{o.time}{endTimeStr ? `~${endTimeStr}` : ''}</div>
+                          {o.status === 'cancelled' && <div className="text-red-500 text-[10px] mt-1 font-semibold">客人已取消</div>}
+                        </td>
+                        <td className="px-2 py-4 text-stone-600 whitespace-nowrap">{durationHoursDisplay}小時</td>
                         <td className="px-5 py-4">
                           <div 
                             className="font-medium text-stone-800 cursor-pointer hover:underline"
@@ -593,16 +763,32 @@ export default function Backend() {
                           >{m?.name || '未知'}</div>
                           <div className="text-xs text-stone-500">{o.memberId}</div>
                         </td>
-                        <td className="px-5 py-4 w-[184px]">
+                        <td className="px-2 py-4 text-stone-600 font-medium whitespace-nowrap">{o.therapistPreference || '不指定按摩師'}</td>
+                        <td className="px-5 py-4 w-[120px]">
                           <ul className="list-disc list-inside text-stone-600 text-xs space-y-1">
                             {sortOrderItems(o.items).map((item, i) => <li key={`${o.id}-i-${i}`} className="whitespace-nowrap truncate w-full">{item.name}({item.duration}分鐘)</li>)}
                           </ul>
                         </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
-                           <div className="font-medium">NT$ {o.finalPrice}</div>
-                           {o.discountAmount > 0 && <div className="text-xs text-green-600 mt-1 whitespace-nowrap">已扣除優惠 ${o.discountAmount}<br/><span className="text-[10px] text-stone-400 whitespace-nowrap">{o.discountFormula}</span></div>}
+                        <td className="px-2 py-4 whitespace-nowrap">
+                           <div className="font-medium text-sm">NT$ {o.finalPrice}</div>
+                           {o.discountAmount > 0 && (
+                             <div className="mt-1">
+                               <button 
+                                 onClick={() => toggleFormula(o.id)}
+                                 className="text-[10px] text-green-600 hover:text-green-700 underline cursor-pointer"
+                               >
+                                 {showFormulaIds.has(o.id) ? '收起明細' : '查看明細'}
+                               </button>
+                               {showFormulaIds.has(o.id) && (
+                                 <div className="text-[10px] text-stone-400 mt-1 leading-tight max-w-[120px] whitespace-normal">
+                                   已扣 ${o.discountAmount}<br/>
+                                   {o.discountFormula}
+                                 </div>
+                               )}
+                             </div>
+                           )}
                         </td>
-                        <td className="px-5 py-4 text-stone-600 whitespace-nowrap">
+                        <td className="px-2 py-4 text-stone-600 whitespace-nowrap">
                           <select 
                             value={o.paymentMethod || ''} 
                             onChange={(e) => {
@@ -619,9 +805,9 @@ export default function Backend() {
                             <option value="全支付">全支付</option>
                           </select>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-2 py-4">
                           <textarea
-                            className="w-40 min-h-[40px] text-xs p-2 border border-stone-200 rounded resize-none focus:outline-none focus:border-stone-500"
+                            className="w-full min-h-[40px] text-xs p-2 border border-stone-200 rounded resize-none focus:outline-none focus:border-stone-500"
                             placeholder="新增備註..."
                             defaultValue={o.note || ''}
                             onBlur={(e) => {
@@ -663,7 +849,7 @@ export default function Backend() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
-                    {ALL_THERAPIST_CATEGORIES.map(therapist => {
+                    {ALL_THERAPIST_CATEGORIES.filter(t => t !== '不指定按摩師' && t !== '男按摩師即可' && t !== '女按摩師即可').map(therapist => {
                     const therapistOrders = orders.filter(o => 
                       o.date.startsWith(orderMonth) && 
                       o.status !== 'cancelled' &&
@@ -806,15 +992,13 @@ export default function Backend() {
                         <td className="px-2 py-4 text-stone-600 text-center">{memberOrders.length} 次</td>
                         <td className="pr-6 py-4 text-stone-600 font-medium text-right">NT$ {totalSpent}</td>
                         <td className="px-0 py-4 text-center">
-                          <select 
-                            value={m.level} 
-                            onChange={(e)=>handleLevelChange(m.id, e.target.value as MemberLevel)}
-                            className={`p-1 border rounded text-xs font-medium outline-none mx-auto block ${m.level==='金卡'?'bg-amber-50 text-amber-800 border-amber-200':m.level==='黑卡'?'bg-stone-800 text-stone-100 border-stone-800':'bg-stone-50 text-stone-600 border-stone-200'}`}
-                          >
-                            <option value="一般">一般會員</option>
-                            <option value="金卡">金卡會員</option>
-                            <option value="黑卡">黑卡會員</option>
-                          </select>
+                          <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm border mx-auto ${
+                            m.level === '金卡' ? 'bg-amber-50 text-amber-800 border-amber-200' : 
+                            m.level === '黑卡' ? 'bg-stone-800 text-stone-100 border-stone-800' : 
+                            'bg-stone-50 text-stone-600 border-stone-200'
+                          }`}>
+                            {m.level}
+                          </div>
                         </td>
                         <td className="px-2 py-4 text-stone-600 text-center text-xs">{m.membershipEndDate || '-'}</td>
                         <td className="px-2 py-4 text-center">
@@ -837,11 +1021,11 @@ export default function Backend() {
                                     編輯基本資料
                                   </h3>
                                   <div className="flex flex-col gap-5">
-                                    {/* Row 1: 姓名, 性別, 手機號碼, LINE ID */}
-                                    <div className="flex flex-wrap gap-4 items-start">
+                                    {/* Row 1: 姓名, 性別, 手機號碼, LINE ID, 生日, 主要按摩師 */}
+                                    <div className="flex flex-wrap gap-x-3 gap-y-4 items-start">
                                       <div className="flex-shrink-0">
                                         <label className="block text-xs text-stone-500 mb-1">姓名</label>
-                                        <input type="text" value={editName} onChange={e=>setEditName(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-20 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                        <input type="text" value={editName} onChange={e=>setEditName(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-[72px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
                                       </div>
                                       <div className="flex-shrink-0">
                                         <label className="block text-xs text-stone-500 mb-1">性別</label>
@@ -856,19 +1040,15 @@ export default function Backend() {
                                       </div>
                                       <div className="flex-shrink-0">
                                         <label className="block text-xs text-stone-500 mb-1">手機號碼</label>
-                                        <input type="text" value={editPhone} onChange={e=>setEditPhone(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-28 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                        <input type="text" value={editPhone} onChange={e=>setEditPhone(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-24 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
                                       </div>
                                       <div className="flex-shrink-0">
                                         <label className="block text-xs text-stone-500 mb-1">LINE ID</label>
-                                        <input type="text" value={editLineId} onChange={e=>setEditLineId(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-28 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                        <input type="text" value={editLineId} onChange={e=>setEditLineId(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className="w-24 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
                                       </div>
-                                    </div>
-
-                                    {/* Row 2: 生日, 主要按摩師, 締結按摩師 */}
-                                    <div className="flex flex-wrap gap-4 items-start">
                                       <div className="flex-shrink-0">
                                         <label className="block text-xs text-stone-500 mb-1">生日</label>
-                                        <div className="relative w-32 cursor-pointer">
+                                        <div className="relative w-[110px] cursor-pointer">
                                           <input 
                                             type="date" 
                                             value={editBirthday} 
@@ -883,33 +1063,21 @@ export default function Backend() {
                                           </div>
                                         </div>
                                       </div>
-                                        <div className="flex-shrink-0">
-                                          <label className="block text-xs text-stone-500 mb-1">主要按摩師</label>
-                                          <select value={editPrimaryTherapist} onChange={e=>{
-                                            setEditPrimaryTherapist(e.target.value);
-                                            handleInfoSave(m.id, { primaryTherapist: e.target.value });
-                                          }} className="w-32 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition">
-                                            <option value="">(無)</option>
-                                            {THERAPISTS_W_GENDER.map(name => (
-                                              <option key={name} value={name}>{name}</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                        <div className="flex-shrink-0">
-                                          <label className="block text-xs text-stone-500 mb-1">締結按摩師</label>
-                                          <select value={editReferredBy} onChange={e=>{
-                                            setEditReferredBy(e.target.value);
-                                            handleInfoSave(m.id, { referredBy: e.target.value });
-                                          }} className="w-32 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition">
-                                            <option value="">(無)</option>
-                                            {THERAPISTS_W_GENDER.map(name => (
-                                              <option key={name} value={name}>{name}</option>
-                                            ))}
-                                          </select>
-                                        </div>
+                                      <div className="flex-shrink-0">
+                                        <label className="block text-xs text-stone-500 mb-1">主要按摩師</label>
+                                        <select value={editPrimaryTherapist} onChange={e=>{
+                                          setEditPrimaryTherapist(e.target.value);
+                                          handleInfoSave(m.id, { primaryTherapist: e.target.value });
+                                        }} className="w-[100px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition px-1">
+                                          <option value="">(無)</option>
+                                          {THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(name => (
+                                            <option key={name} value={name}>{name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
                                     </div>
 
-                                    {/* Row 3: 會員等級, 資格起始, 資格結束, 締結月份 */}
+                                    {/* Row 3: 會員等級, [Conditional] 締結按摩師, 締結日期, 優惠期限, 締結月份 */}
                                     <div className="flex flex-wrap gap-4 items-start">
                                       <div className="flex-shrink-0 relative group">
                                         <label className="block text-xs text-stone-500 mb-1">會員等級</label>
@@ -917,7 +1085,7 @@ export default function Backend() {
                                           const newLevel = e.target.value as MemberLevel;
                                           setEditLevel(newLevel);
                                           handleInfoSave(m.id, { level: newLevel });
-                                        }} className="w-24 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition">
+                                        }} className="w-24 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition-all duration-300 font-bold">
                                           <option value="一般">一般會員</option>
                                           <option value="金卡">金卡會員</option>
                                           <option value="黑卡">黑卡會員</option>
@@ -934,29 +1102,133 @@ export default function Backend() {
                                       </div>
                                       {(editLevel === '金卡' || editLevel === '黑卡') && (
                                         <>
-                                          <div className="flex-shrink-0 flex items-center space-x-2 mt-8 ml-2">
-                                            <div className="h-4 w-px bg-stone-300 hidden md:block"></div>
+                                          <div className="flex-shrink-0">
+                                            <label className="block text-xs text-stone-500 mb-1">締結按摩師</label>
+                                            <select value={editReferredBy} onChange={e=>{
+                                              setEditReferredBy(e.target.value);
+                                              handleInfoSave(m.id, { referredBy: e.target.value });
+                                            }} className="w-32 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition">
+                                              <option value="">(無)</option>
+                                              {THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(name => (
+                                                <option key={name} value={name}>{name}</option>
+                                              ))}
+                                            </select>
                                           </div>
                                           <div className="flex-shrink-0">
-                                            <label className="block text-xs text-stone-500 mb-1">資格起始</label>
+                                            <label className="block text-xs text-stone-500 mb-1">締結日期</label>
                                             <input type="date" value={editMembershipStartDate} onChange={e=>{
                                               setEditMembershipStartDate(e.target.value);
-                                            }} onBlur={()=>handleInfoSave(m.id)} className="w-32 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                            }} onBlur={()=>handleInfoSave(m.id)} className="w-[120px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
                                           </div>
                                           <div className="flex-shrink-0">
-                                            <label className="block text-xs text-stone-500 mb-1">資格結束</label>
+                                            <label className="block text-xs text-stone-500 mb-1">優惠期限</label>
                                             <input type="date" value={editMembershipEndDate} onChange={e=>{
                                               setEditMembershipEndDate(e.target.value);
-                                            }} onBlur={()=>handleInfoSave(m.id)} className="w-32 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                            }} onBlur={()=>handleInfoSave(m.id)} className="w-[120px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
                                           </div>
                                           <div className="flex-shrink-0">
                                             <label className="block text-xs text-stone-500 mb-1">締結月份</label>
                                             <input type="month" value={editReferredMonth} onChange={e=>{
                                               setEditReferredMonth(e.target.value);
                                               handleInfoSave(m.id, { referredMonth: e.target.value });
-                                            }} className="w-32 text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
+                                            }} className="w-[120px] text-sm p-2 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition" />
                                           </div>
                                         </>
+                                      )}
+
+                                      {/* Account Settings */}
+                                      {isAdmin && (
+                                        <div className="flex flex-col md:col-span-3 mt-4 pt-4 border-t border-stone-200">
+                                          <label className="block text-[10px] font-bold text-stone-400 mb-2 uppercase tracking-widest px-1">帳號安全性與權限設定</label>
+                                          <div className={`grid grid-cols-1 md:grid-cols-12 items-center gap-4 p-4 rounded-xl border transition-all duration-300 shadow-md ${
+                                            editRole === 'therapist' ? 'bg-emerald-50/50 border-emerald-200' : 'bg-stone-50 border-stone-200'
+                                          }`}>
+                                            {/* 1. Account Role */}
+                                            <div className="md:col-span-3">
+                                              <label className="block text-[10px] font-bold text-stone-400 mb-1 uppercase tracking-tighter">1. 帳號權限設定</label>
+                                              <select 
+                                                value={editRole} 
+                                                onChange={e => {
+                                                  const newRole = e.target.value as any;
+                                                  setEditRole(newRole);
+                                                  const newTherapistName = newRole === 'therapist' ? editTherapistName : '';
+                                                  if (newRole !== 'therapist') setEditTherapistName('');
+                                                  handleInfoSave(m.id, { role: newRole, therapistName: newTherapistName });
+                                                }}
+                                                className={`w-full text-sm p-2.5 rounded-lg outline-none transition shadow-sm border-2 font-bold ${
+                                                  editRole === 'therapist' ? 'bg-emerald-600 text-white border-emerald-600' : 
+                                                  editRole === 'admin' ? 'bg-stone-800 text-white border-stone-800' : 
+                                                  'bg-white text-stone-800 border-stone-200'
+                                                }`}
+                                              >
+                                                <option value="member" className="bg-white text-stone-800">一般顧客端</option>
+                                                <option value="therapist" className="bg-white text-stone-800">按摩師分頁</option>
+                                                <option value="admin" className="bg-white text-stone-800">系統管理員</option>
+                                              </select>
+                                            </div>
+
+                                            {/* Divider */}
+                                            <div className="hidden md:flex h-10 w-px bg-stone-200 self-end mb-1"></div>
+
+                                            {/* 2. Therapist Name Link */}
+                                            <div className="md:col-span-5">
+                                              <label className={`block text-[10px] font-bold mb-1 uppercase tracking-tighter ${editRole === 'therapist' ? 'text-emerald-600' : 'text-stone-400'}`}>
+                                                2. 連結指定師傅
+                                              </label>
+                                              <select 
+                                                value={editTherapistName} 
+                                                disabled={editRole !== 'therapist'}
+                                                onChange={e => {
+                                                  setEditTherapistName(e.target.value);
+                                                  handleInfoSave(m.id, { therapistName: e.target.value });
+                                                }}
+                                                className={`w-full text-sm p-2.5 rounded-lg outline-none transition font-bold shadow-sm border-2 ${
+                                                  editRole !== 'therapist' ? 'bg-stone-100 border-stone-200 text-stone-400 cursor-not-allowed' :
+                                                  editTherapistName ? 'bg-white border-emerald-500 text-emerald-800 focus:ring-2 focus:ring-emerald-200' : 
+                                                  'bg-white border-red-400 text-red-500 animate-pulse'
+                                                }`}
+                                              >
+                                                <option value="">(選擇現有師傅連結)</option>
+                                                {(() => {
+                                                  const takenNames = members
+                                                    .filter(other => other.id !== m.id && other.role === 'therapist' && other.therapistName)
+                                                    .map(other => other.therapistName);
+                                                    
+                                                  return THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(t => {
+                                                    const isTaken = takenNames.includes(t);
+                                                    return (
+                                                      <option key={t} value={t} disabled={isTaken} className={isTaken ? 'text-stone-300' : ''}>
+                                                        {t}{isTaken ? ' (已被連結)' : ''}
+                                                      </option>
+                                                    );
+                                                  });
+                                                })()}
+                                              </select>
+                                            </div>
+                                            
+                                            {/* 3. Password */}
+                                            <div className="md:col-span-3 flex flex-col">
+                                              <label className="block text-[10px] font-bold text-stone-400 mb-1 uppercase tracking-tighter">3. 設定登入密碼</label>
+                                              <div className="flex items-center gap-2">
+                                                <input 
+                                                  type="text" 
+                                                  value={editPassword} 
+                                                  onChange={e => setEditPassword(e.target.value)}
+                                                  onBlur={e => handleInfoSave(m.id, { password: e.target.value })}
+                                                  placeholder="密碼"
+                                                  className="w-24 text-sm p-2.5 border-2 border-stone-200 rounded-lg focus:border-stone-400 focus:ring-4 focus:ring-stone-100 bg-white outline-none transition shadow-sm font-mono" 
+                                                />
+                                                {editRole === 'therapist' && editTherapistName && (
+                                                  <div className="flex flex-col items-end gap-0.5">
+                                                     <div className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase whitespace-nowrap">
+                                                       已就緒
+                                                     </div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
                                       )}
                                     </div>
                                   </div>
@@ -1017,15 +1289,14 @@ export default function Backend() {
                                       {filteredOrders.map(mo => {
                                       const dateObj = new Date(mo.date);
                                       const formattedDate = isNaN(dateObj.getTime()) ? mo.date.replace(/-/g, '/') : `${dateObj.getFullYear()}/${String(dateObj.getMonth() + 1).padStart(2,'0')}/${String(dateObj.getDate()).padStart(2,'0')}(${['日','一','二','三','四','五','六'][dateObj.getDay()]})`;
-                                      
                                       const endTimeStr = mo.time && mo.totalDuration ? minsToTime(timeToMins(mo.time) + mo.totalDuration) : '';
                                       const durationHoursDisplay = (mo.totalDuration / 60) % 1 === 0 ? (mo.totalDuration / 60) : (mo.totalDuration / 60).toFixed(1);
-                                      
+
                                       return (
                                         <li key={mo.id} className="text-sm flex flex-col md:flex-row items-stretch p-4 bg-stone-50 rounded-lg border border-stone-200 gap-4">
                                           <div className="flex-[1.2] flex flex-col space-y-1">
-                                            <div className="font-medium text-stone-900 border-b border-stone-200 pb-3 mb-2 flex flex-col space-y-1">
-                                              <div>{formattedDate} {mo.time}{endTimeStr ? `~${endTimeStr}` : ''} ({durationHoursDisplay}小時)</div>
+                                            <div className="text-stone-900 pb-3 mb-2 flex flex-col space-y-1">
+                                              <div className="text-base font-bold">{formattedDate} {mo.time}{endTimeStr ? `~${endTimeStr}` : ''} ({durationHoursDisplay}小時)</div>
                                               <div>服務按摩師：{mo.therapistPreference || '不指定按摩師'}</div>
                                               <div>金額:NT${mo.finalPrice} {mo.paymentMethod ? `(${mo.paymentMethod})` : ''}</div>
                                             </div>
@@ -1039,10 +1310,10 @@ export default function Backend() {
                                           
                                           {/* Discomfort Areas Checkboxes */}
                                           <div className="w-full md:w-[28%] border-t md:border-t-0 md:border-l border-stone-200 pt-4 md:pt-0 md:pl-4">
-                                            <label className="block text-xs text-stone-500 mb-2 font-medium">當日不適部位</label>
+                                            <label className="block text-sm text-stone-600 mb-2 uppercase tracking-wider">當日不適部位</label>
                                             <div className="grid grid-cols-4 md:grid-cols-3 gap-2">
-                                              {['頭','頸','肩膀','上背','下背','臀','大腿','小腿','足','胸','腹'].map(area => (
-                                                <label key={area} className="flex items-center text-xs text-stone-700 cursor-pointer hover:bg-stone-100 p-0.5 rounded transition">
+                                              {['頭','頸','肩','上背','下背','臀','大腿','小腿','足','胸','腹','手'].map(area => (
+                                                <label key={area} className="flex items-center text-[13px] md:text-sm text-stone-800 cursor-pointer hover:bg-stone-100 p-1 rounded transition">
                                                   <input 
                                                     type="checkbox" 
                                                     checked={mo.discomfortAreas?.includes(area) || false} 
@@ -1050,14 +1321,14 @@ export default function Backend() {
                                                       const current = mo.discomfortAreas || [];
                                                       let updated = [];
                                                       if (e.target.checked) {
-                                                         updated = [...current, area];
+                                                        updated = [...current, area];
                                                       } else {
-                                                         updated = current.filter(x => x !== area);
+                                                        updated = current.filter(x => x !== area);
                                                       }
                                                       db.updateOrder(mo.id, { discomfortAreas: updated });
                                                       setOrders(db.getOrders());
                                                     }}
-                                                    className="mr-1.5 accent-stone-700" 
+                                                    className="w-4 h-4 mr-1.5 accent-stone-800" 
                                                   />
                                                   {area}
                                                 </label>
@@ -1066,7 +1337,7 @@ export default function Backend() {
                                           </div>
 
                                           <div className="w-full md:w-1/3 flex flex-col border-t md:border-t-0 md:border-l border-stone-200 pt-4 md:pt-0 md:pl-4">
-                                            <label className="text-xs text-stone-500 mb-2 font-medium">服務紀錄及備註</label>
+                                            <label className="text-sm text-stone-600 mb-2 uppercase tracking-wider">服務紀錄及備註</label>
                                             <textarea
                                               className="flex-1 min-h-[100px] w-full p-2.5 text-sm border border-stone-200 rounded focus:outline-none focus:border-stone-400 resize-none transition bg-white"
                                               placeholder="輸入針對這次預約的特別備註或事後記錄..."
@@ -1082,22 +1353,712 @@ export default function Backend() {
                                       );
                                     })}
                                   </ul>
-                                  );
-                                })()}
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
+
+  {tab === 'therapist' && (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Therapist Header with Stats */}
+      {selectedTherapistPortal && (
+        <div className="space-y-4">
+          {(() => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const therapistOrders = orders.filter(o => 
+              o.status !== 'cancelled' &&
+              o.therapistPreference === selectedTherapistPortal
+            );
+            const monthlyOrders = therapistOrders.filter(o => o.date.startsWith(orderMonth));
+            const todaysOrdersCount = therapistOrders.filter(o => o.date === todayStr).length;
+            
+            const totalMins = monthlyOrders.reduce((sum, o) => sum + o.totalDuration, 0);
+            const totalHours = totalMins / 60;
+            const baseSalary = totalHours * 600;
+            
+            const goldMembers = members.filter(m => m.level === '金卡' && m.referredBy === selectedTherapistPortal && m.referredMonth === orderMonth);
+            const blackMembers = members.filter(m => m.level === '黑卡' && m.referredBy === selectedTherapistPortal && m.referredMonth === orderMonth);
+            const closingBonus = goldMembers.length * 1200 + blackMembers.length * 3000;
+            
+            let completionBonus = 0;
+            if (totalHours >= 96) completionBonus = 10500;
+            else if (totalHours >= 48) completionBonus = 4500;
+            else if (totalHours >= 24) completionBonus = 1500;
+
+            const expectedSalary = baseSalary + closingBonus + completionBonus;
+
+            return (
+              <>
+                   {/* First Row: Main Dashboard */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-l-emerald-500 border border-stone-200 flex flex-col justify-between hover:shadow-md transition">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">本月預計薪資</p>
+                          <p className="text-4xl font-light text-emerald-600">${expectedSalary.toLocaleString()}</p>
+                        </div>
+                        <button 
+                          onClick={() => setViewingAppts('today')}
+                          className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 text-left hover:border-stone-400 hover:shadow-md transition group"
+                        >
+                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">今日預約數</p>
+                          <div className="flex justify-between items-end">
+                            <p className="text-4xl font-light text-stone-800">{todaysOrdersCount} <span className="text-sm text-stone-400">筆</span></p>
+                            <span className="text-xs text-emerald-600 font-medium opacity-0 group-hover:opacity-100 transition translate-x-2 group-hover:translate-x-0">查看列表 →</span>
+                          </div>
+                        </button>
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 hover:shadow-md transition">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">本月累計預約</p>
+                          <p className="text-4xl font-light text-stone-800">{monthlyOrders.length} <span className="text-sm text-stone-400">筆</span></p>
+                        </div>
+                        <button 
+                          onClick={() => setViewingAppts('all')}
+                          className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 text-left hover:border-stone-400 hover:shadow-md transition group"
+                        >
+                          <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">所有預約紀錄</p>
+                          <div className="flex justify-between items-end">
+                            <p className="text-4xl font-light text-stone-800">{therapistOrders.length} <span className="text-sm text-stone-400">筆</span></p>
+                            <Calendar className="w-5 h-5 text-stone-300 group-hover:text-stone-600 transition" />
+                          </div>
+                        </button>
+                      </div>
+
+                      {/* Second Row: Detailed Breakdown */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 border-dashed flex flex-col justify-between">
+                          <p className="text-xs font-semibold text-stone-500 mb-2 uppercase tracking-wide">本月基本薪資 (時數×600)</p>
+                          <p className="text-2xl text-stone-800 font-medium">${baseSalary.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 border-dashed flex flex-col justify-between">
+                          <p className="text-xs font-semibold text-stone-500 mb-2 uppercase tracking-wide">本月完課獎金</p>
+                          <p className="text-2xl text-stone-800 font-medium">${completionBonus.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-stone-50 p-6 rounded-2xl border border-stone-200 border-dashed">
+                          <p className="text-xs font-semibold text-stone-500 mb-3 uppercase tracking-wide">本月締結獎金</p>
+                          <div className="space-y-2">
+                            <button 
+                              onClick={() => setBonusModal({ therapist: selectedTherapistPortal, level: '金卡', month: orderMonth })}
+                              className="flex justify-between text-sm w-full bg-white/50 hover:bg-white p-2 rounded-xl transition border border-transparent hover:border-emerald-100"
+                            >
+                              <span className="text-stone-600">金卡：<span className="text-stone-900 font-bold">{goldMembers.length}</span> 位</span>
+                              <span className="text-emerald-700 font-semibold">${(goldMembers.length * 1200).toLocaleString()}</span>
+                            </button>
+                            <button 
+                              onClick={() => setBonusModal({ therapist: selectedTherapistPortal, level: '黑卡', month: orderMonth })}
+                              className="flex justify-between text-sm w-full bg-white/50 hover:bg-white p-2 rounded-xl transition border border-transparent hover:border-emerald-100"
+                            >
+                              <span className="text-stone-600">黑卡：<span className="text-stone-900 font-bold">{blackMembers.length}</span> 位</span>
+                              <span className="text-emerald-700 font-semibold">${(blackMembers.length * 3000).toLocaleString()}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            {!isAdmin && selectedTherapistPortal && (
+               <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                  <h2 className="text-xl font-medium text-stone-800 mb-6 flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-stone-600" />
+                      我的預約列表 (即將到來)
+                  </h2>
+                  <div className="space-y-3">
+                    {(() => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const myOrders = orders.filter(o => 
+                         o.therapistPreference === selectedTherapistPortal && 
+                         o.date >= todayStr && 
+                         o.status !== 'cancelled'
+                      ).sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+                      if (myOrders.length === 0) return <p className="text-sm text-stone-400 py-8 text-center italic">目前尚無預約</p>;
+
+                      return myOrders.map(o => {
+                        const m = members.find(x => x.id === o.memberId);
+                        const endTime = minsToTime(timeToMins(o.time) + o.totalDuration);
+                        return (
+                            <div key={o.id} className="flex flex-col border border-stone-100 rounded-xl hover:shadow-md transition overflow-hidden">
+                              <div className="flex flex-col md:flex-row md:items-center justify-between p-4 gap-4">
+                                <div className="flex items-center gap-4">
+                                  <div className="bg-stone-800 text-white p-2 rounded-lg text-center min-w-[85px] py-2.5">
+                                    <div className="text-[11px] opacity-70 leading-none mb-1.5 font-medium">{o.date.split('-')[1]}/{o.date.split('-')[2]}</div>
+                                    <div className="text-base font-bold">{o.time}</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-semibold text-stone-800">{m?.name || '未知客戶'} ({m?.gender || '女'})</div>
+                                    <div className="text-xs text-stone-500">預計時長：{o.totalDuration} 分鐘 (至 {endTime})</div>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {o.items.map(item => (
+                                    <span key={item.id} className="px-2 py-1 bg-stone-100 text-stone-600 rounded text-[10px]">{item.name}</span>
+                                  ))}
+                                </div>
+                                <button 
+                                  onClick={() => handleShare(o)}
+                                  className="text-xs text-emerald-600 hover:text-emerald-700 font-medium px-3 py-1 border border-emerald-100 rounded-lg bg-emerald-50 whitespace-nowrap"
+                                >
+                                  複製預約通知
+                                </button>
+                              </div>
+                              
+                              <div className="px-4 pb-4 pt-1 bg-stone-50/30 flex flex-col gap-3 border-t border-stone-50">
+                                <div className="flex flex-col md:flex-row gap-3 items-stretch">
+                                  <div className="flex-1">
+                                    <label className="block text-[11px] text-stone-400 mb-1 uppercase tracking-wider">備註與服務紀錄</label>
+                                    <textarea
+                                      className="w-full text-xs p-2 border border-stone-200 rounded resize-none focus:outline-none focus:border-stone-500 bg-white placeholder:text-stone-300 text-stone-700 h-16 shadow-sm"
+                                      placeholder="紀錄今日服務狀況..."
+                                      defaultValue={o.note || ''}
+                                      onBlur={(e) => {
+                                        if (e.target.value !== o.note) {
+                                          db.updateOrder(o.id, { note: e.target.value });
+                                          setOrders(db.getOrders());
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                                
+                                <div className="border-t border-stone-100 pt-2 pb-1">
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    <label className="text-[11px] text-stone-400 uppercase tracking-wider whitespace-nowrap">今日不適部位：</label>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                      {['頭','頸','肩','上背','下背','臀','大腿','小腿','足','胸','腹','手'].map(area => (
+                                        <label key={area} className="flex items-center text-[12px] text-stone-800 cursor-pointer hover:bg-stone-100 px-1 rounded transition whitespace-nowrap">
+                                          <input 
+                                            type="checkbox" 
+                                            checked={o.discomfortAreas?.includes(area) || false} 
+                                            onChange={e => {
+                                              const current = o.discomfortAreas || [];
+                                              let updated = [];
+                                              if (e.target.checked) {
+                                                 updated = [...current, area];
+                                              } else {
+                                                 updated = current.filter(x => x !== area);
+                                              }
+                                              db.updateOrder(o.id, { discomfortAreas: updated });
+                                              setOrders(db.getOrders());
+                                            }}
+                                            className="w-3.5 h-3.5 mr-1.5 accent-stone-800" 
+                                          />
+                                          {area}
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </td>
-                        </tr>
+                        );
+                      });
+                    })()}
+                  </div>
+               </div>
+            )}
+
+            <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-medium text-stone-800 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-stone-600" />
+                      師傅出勤設定
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    {(() => {
+                      const now = new Date();
+                      const currentMonthStr = now.toISOString().slice(0, 7);
+                      const nextTwoMonths = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+                      const maxMonthStr = nextTwoMonths.toISOString().slice(0, 7);
+                      return (
+                        <input 
+                          type="month" 
+                          min={currentMonthStr} 
+                          max={maxMonthStr} 
+                          value={orderMonth} 
+                          onChange={e => setOrderMonth(e.target.value)} 
+                          className="text-sm border border-stone-200 rounded-lg p-2 outline-none focus:border-stone-500 bg-white" 
+                        />
+                      );
+                    })()}
+                    {selectedTherapistPortal && (
+                      <div className="text-sm text-stone-500 bg-stone-100 px-3 py-1 rounded-full">
+                        正在設定：{selectedTherapistPortal}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  {isAdmin && (
+                    <div className="md:col-span-1 space-y-4">
+                      <div className="bg-stone-50 p-4 rounded-xl border border-stone-100">
+                        <label className="block text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">選擇師傅</label>
+                        <div className="space-y-1">
+                          {THERAPISTS_W_GENDER.filter(t => !t.includes('即可')).map(t => (
+                            <button 
+                              key={t}
+                              onClick={() => setSelectedTherapistPortal(t)}
+                              className={`w-full text-left px-4 py-2.5 rounded-lg text-sm transition ${selectedTherapistPortal === t ? 'bg-stone-800 text-white shadow-md' : 'text-stone-600 hover:bg-stone-200/50'}`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {selectedTherapistPortal && (
+                        <div className="bg-stone-900 text-stone-100 p-4 rounded-xl shadow-lg">
+                          <p className="text-xs text-stone-400 mb-2">使用說明</p>
+                          <ul className="text-xs space-y-2 opacity-80 list-disc pl-4">
+                            <li>點擊月曆即可設定該日可預約時段。</li>
+                            <li>未設定時段預設為不排班(灰色)。</li>
+                          </ul>
+                        </div>
                       )}
-                    </React.Fragment>
-                  )})}
-                </tbody>
-              </table>
+                    </div>
+                  )}
+
+                    <div className={isAdmin ? "md:col-span-3" : "md:col-span-4"}>
+                      {!selectedTherapistPortal ? (
+                        <div className="bg-stone-50 rounded-2xl border border-stone-100 border-dashed h-full min-h-[400px] flex flex-col items-center justify-center text-stone-400 p-6 text-center">
+                          <Lock className="w-12 h-12 mb-4 opacity-10" />
+                          <p className="max-w-xs">
+                            {isAdmin 
+                              ? "請先從左面板選擇師傅，即可開始管理該師傅本月份的預約及出勤時間。" 
+                              : "您的帳號尚未連結師傅身份，請聯繫管理員設定對應的師傅姓名後，即可查看您的專屬排班資料。"}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center mb-1">
+                              <h3 className="text-sm font-medium text-stone-600 font-serif">{orderMonth.split('-')[0]}年 {parseInt(orderMonth.split('-')[1])}月</h3>
+                              <div className="flex gap-4 text-[10px]">
+                                <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-stone-800"></span> 已排班</div>
+                                <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-stone-100 border border-stone-200"></span> 未排班</div>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-7 gap-1 lg:gap-2">
+                                {['一','二','三','四','五','六','日'].map(d => (
+                                    <div key={d} className="p-2 text-center text-xs font-semibold text-stone-400">{d}</div>
+                                ))}
+                                {(() => {
+                                    const [year, month] = orderMonth.split('-').map(Number);
+                                    let firstDay = new Date(year, month - 1, 1).getDay();
+                                    // Adjust firstDay: Sunday(0) -> 6, Monday(1) -> 0...
+                                    firstDay = (firstDay + 6) % 7;
+                                    const daysInMonth = new Date(year, month, 0).getDate();
+                                    
+                                    const cells = [];
+                                    for (let i = 0; i < firstDay; i++) {
+                                        cells.push(<div key={`empty-${i}`} className="bg-stone-50/30 rounded-lg min-h-[80px]"></div>);
+                                    }
+                                    for (let d = 1; d <= daysInMonth; d++) {
+                                        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                                        const available = availabilities.find(a => a.therapistName === selectedTherapistPortal && a.date === dateStr);
+                                        const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                                        const hasSlots = available && available.slots && available.slots.length > 0;
+                                        
+                                        cells.push(
+                                        <div 
+                                                key={d} 
+                                                onClick={() => setEditingAvailability({ date: dateStr, slots: available?.slots || [] })}
+                                                className={`p-2 min-h-[95px] border rounded-xl flex flex-col items-start gap-1.5 relative group cursor-pointer transition-all hover:shadow-lg ${hasSlots ? 'bg-sky-50/50 border-sky-200 hover:bg-sky-100/50 hover:border-sky-300' : 'bg-pink-50/50 border-pink-200 border-dashed hover:bg-pink-100/50 hover:border-pink-300 text-stone-500'} ${isToday ? 'ring-2 ring-stone-800 ring-offset-2' : ''}`}
+                                            >
+                                                <span className={`text-[11px] w-5 h-5 flex items-center justify-center rounded-full font-bold z-10 ${isToday ? 'bg-stone-800 text-white' : hasSlots ? 'text-sky-800 bg-sky-100/50' : 'text-pink-600 bg-pink-100/50'}`}>{d}</span>
+                                                <div className="w-full flex-1 overflow-y-auto space-y-1 z-10 relative">
+                                                    {available && available.slots && available.slots.map((s: any, idx: number) => (
+                                                        <div key={idx} className="bg-sky-600/90 text-white text-[10px] px-1 py-0.5 rounded w-full truncate text-center shadow-sm font-medium">
+                                                            {s.start}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {hasSlots && (
+                                                  <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-sky-500 rounded-full shadow-sm z-10 group-hover:opacity-0"></div>
+                                                )}
+                                                {hasSlots && (
+                                                  <button 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setConfirmAction({
+                                                        message: `確定要刪除 ${dateStr.replace(/-/g, '/')} 的整天排班嗎？`,
+                                                        onConfirm: () => {
+                                                          db.deleteAvailability(`${selectedTherapistPortal}_${dateStr}`);
+                                                          setAvailabilities(db.getAvailability());
+                                                        }
+                                                      });
+                                                    }}
+                                                    className="absolute top-1.5 right-1.5 p-1 text-stone-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                                                    title="刪除整天排班"
+                                                  >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
+                                                <div className="absolute inset-0 bg-stone-900/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center z-20 backdrop-blur-[1px]">
+                                                    <span className="bg-white text-stone-900 text-xs font-bold px-3 py-1.5 rounded-full shadow-lg">編輯設定</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return cells;
+                                })()}
+                            </div>
+                        </div>
+                    )}
+                  </div>
+                </div>
             </div>
+
+            {/* Editing Modal */}
+            {editingAvailability && (
+                <div className="fixed inset-0 z-[200] bg-stone-900/70 flex items-center justify-center p-4 backdrop-blur-md transition-all">
+                    <div className="bg-stone-50 rounded-3xl w-full max-w-sm shadow-[0_20px_50px_rgba(0,0,0,0.3)] animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col border-none">
+                        {/* Modal Header - Redesigned for No-Gap Look */}
+                        <div className="bg-stone-800 text-white px-6 py-6 relative overflow-hidden">
+                            <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+                            <div className="flex justify-between items-start relative z-10">
+                                <div>
+                                    <div className="flex items-center gap-1.5 text-stone-400 text-[11px] font-bold mb-2 uppercase tracking-widest bg-white/5 w-fit px-2.5 py-1 rounded-full border border-white/10">
+                                        <User className="w-3.5 h-3.5" />
+                                        {selectedTherapistPortal} 的出勤排班
+                                    </div>
+                                    <h3 className="text-[24px] font-black tracking-tight leading-tight flex items-center gap-2">
+                                      {(() => {
+                                        const d = new Date(editingAvailability.date);
+                                        const isValidDate = !isNaN(d.getTime());
+                                        const days = ['日','一','二','三','四','五','六'];
+                                        return isValidDate ? `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} (${days[d.getDay()]})` : editingAvailability.date.replace(/-/g, '/');
+                                      })()}
+                                    </h3>
+                                </div>
+                                <button onClick={() => setEditingAvailability(null)} className="text-stone-400 hover:text-white hover:bg-white/10 transition p-2 rounded-full ml-4">
+                                    <X className="w-5 h-5"/>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="p-6 pt-5 space-y-5 max-h-[60vh] overflow-y-auto w-full bg-stone-50">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-2 border-b border-stone-200 pb-3 gap-3">
+                              <span className="text-[15px] font-bold text-stone-800 whitespace-nowrap">請選取可服務之時段</span>
+                              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                                  <button 
+                                    onClick={() => {
+                                      const newSlots = consolidateAvailability(ALL_TIME_SLOTS);
+                                      setEditingAvailability({ ...editingAvailability, slots: newSlots });
+                                    }}
+                                    className="text-[10px] font-bold px-2.5 py-1.5 bg-white text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition shadow-sm active:scale-95"
+                                  >
+                                    一鍵全選
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      setEditingAvailability({ ...editingAvailability, slots: [] });
+                                    }}
+                                    className="text-[10px] font-bold px-2.5 py-1.5 bg-white text-stone-600 border border-stone-200 rounded-lg hover:bg-stone-50 transition shadow-sm active:scale-95"
+                                  >
+                                    全部取消
+                                  </button>
+                                  <button 
+                                    onClick={() => setShowCopyCalendar(true)}
+                                    className="text-[10px] font-bold px-2.5 py-1.5 bg-stone-800 text-white border border-stone-800 rounded-lg hover:bg-stone-700 transition shadow-sm flex items-center gap-1 active:scale-95"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    複製此排班至
+                                  </button>
+                              </div>
+                            </div>
+
+                            {showCopyCalendar && (
+                                <div className="p-4 bg-white border border-stone-200 rounded-xl shadow-lg animate-in fade-in zoom-in-95 duration-200">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h5 className="text-sm font-bold text-stone-800">選擇複製目標日期 (可多選)</h5>
+                                        <button 
+                                            onClick={() => { setShowCopyCalendar(false); setCopyTargetDates([]); }}
+                                            className="p-1 hover:bg-stone-100 rounded-full"
+                                        >
+                                            <X className="w-4 h-4 text-stone-400" />
+                                        </button>
+                                    </div>
+                                    
+                                    {(() => {
+                                        const today = new Date();
+                                        const currentYear = copyMonthView.getFullYear();
+                                        const currentMonth = copyMonthView.getMonth();
+                                        
+                                        const minMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                                        const maxMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+                                        const isMinMonth = currentYear === minMonth.getFullYear() && currentMonth === minMonth.getMonth();
+                                        const isMaxMonth = currentYear === maxMonth.getFullYear() && currentMonth === maxMonth.getMonth();
+
+                                        const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+                                        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+                                        const startingDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7;
+                                        
+                                        const days = [];
+                                        for (let i = 0; i < startingDayOfWeek; i++) {
+                                            days.push(<div key={`empty-${i}`} className="h-8"></div>);
+                                        }
+                                        
+                                        for (let d = 1; d <= daysInMonth; d++) {
+                                            const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                                            const dateObj = new Date(currentYear, currentMonth, d, 23, 59, 59);
+                                            const isPast = dateObj < today;
+                                            const isSelected = copyTargetDates.includes(dateStr);
+                                            const isSource = editingAvailability?.date === dateStr;
+                                            const hasExisting = availabilities.some(a => a.therapistName === selectedTherapistPortal && a.date === dateStr && a.slots?.length > 0);
+                                            const isToday_ = today.toISOString().split('T')[0] === dateStr;
+
+                                            days.push(
+                                                <button
+                                                    key={d}
+                                                    type="button"
+                                                    disabled={isPast || isSource}
+                                                    onClick={() => {
+                                                        setCopyTargetDates(prev => 
+                                                            prev.includes(dateStr) 
+                                                            ? prev.filter(t => t !== dateStr) 
+                                                            : [...prev, dateStr]
+                                                        );
+                                                    }}
+                                                    className={`h-8 w-full flex items-center justify-center rounded text-xs transition-all relative ${
+                                                        isSelected ? 'bg-stone-800 text-white font-bold' 
+                                                        : isSource ? 'bg-amber-100 text-amber-700 font-bold border border-amber-200 cursor-not-allowed'
+                                                        : isPast ? 'text-stone-300 cursor-not-allowed opacity-50'
+                                                        : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+                                                    } ${isToday_ ? 'ring-1 ring-stone-400' : ''}`}
+                                                >
+                                                    {d}
+                                                    {hasExisting && !isSelected && !isSource && !isPast && (
+                                                      <div className="absolute bottom-1 w-1 h-1 bg-stone-300 rounded-full"></div>
+                                                    )}
+                                                </button>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between px-2">
+                                                    <button 
+                                                        onClick={() => {
+                                                            const prev = new Date(copyMonthView);
+                                                            prev.setMonth(prev.getMonth() - 1);
+                                                            setCopyMonthView(prev);
+                                                        }}
+                                                        disabled={isMinMonth}
+                                                        className={`p-1 rounded hover:bg-stone-100 ${isMinMonth ? 'opacity-20 cursor-not-allowed' : ''}`}
+                                                    >
+                                                        <ChevronLeft className="w-4 h-4" />
+                                                    </button>
+                                                    <span className="text-xs font-bold text-stone-600">{currentYear}年 {currentMonth + 1}月</span>
+                                                    <button 
+                                                        onClick={() => {
+                                                            const next = new Date(copyMonthView);
+                                                            next.setMonth(next.getMonth() + 1);
+                                                            setCopyMonthView(next);
+                                                        }}
+                                                        disabled={isMaxMonth}
+                                                        className={`p-1 rounded hover:bg-stone-100 ${isMaxMonth ? 'opacity-20 cursor-not-allowed' : ''}`}
+                                                    >
+                                                        <ChevronRight className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-7 gap-1 text-[10px] font-bold text-stone-400 text-center">
+                                                    {['一', '二', '三', '四', '五', '六', '日'].map(w => <div key={w}>{w}</div>)}
+                                                </div>
+                                                <div className="grid grid-cols-7 gap-1">
+                                                    {days}
+                                                </div>
+                                                <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
+                                                    <span className="text-[10px] text-stone-500 font-medium">已選擇 {copyTargetDates.length} 個日期</span>
+                                                    <div className="flex gap-2">
+                                                       <button 
+                                                            onClick={() => { setShowCopyCalendar(false); setCopyTargetDates([]); }}
+                                                            className="px-3 py-1 text-[10px] font-bold text-stone-500 hover:text-stone-700 transition"
+                                                       >
+                                                            取消
+                                                       </button>
+                                                       <button 
+                                                            disabled={copyTargetDates.length === 0}
+                                                            onClick={() => {
+                                                                setConfirmAction({
+                                                                    message: `確定要將本日排班複製到這 ${copyTargetDates.length} 個日期嗎？\n(這將會覆蓋這些日期原有的排班設定)`,
+                                                                    onConfirm: () => {
+                                                                        copyTargetDates.forEach(date => {
+                                                                            db.saveAvailability({
+                                                                                id: `${selectedTherapistPortal}_${date}`,
+                                                                                therapistName: selectedTherapistPortal,
+                                                                                date: date,
+                                                                                slots: editingAvailability?.slots || []
+                                                                            });
+                                                                        });
+                                                                        setAvailabilities(db.getAvailability());
+                                                                        setShowCopyCalendar(false);
+                                                                        setCopyTargetDates([]);
+                                                                        setConfirmAction({ message: '批量複製成功！' });
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className={`px-3 py-1 text-[10px] font-bold rounded-lg transition shadow-sm ${
+                                                                copyTargetDates.length === 0 
+                                                                ? 'bg-stone-100 text-stone-300 cursor-not-allowed' 
+                                                                : 'bg-stone-800 text-white hover:bg-stone-700 active:scale-95'
+                                                            }`}
+                                                       >
+                                                            確認複製
+                                                       </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                            
+                            <div className="grid grid-cols-3 gap-2.5">
+                                {(() => {
+                                  const selectedTimes = new Set<string>();
+                                  editingAvailability.slots.forEach(s => {
+                                    let curr = timeToMins(s.start);
+                                    const end = timeToMins(s.end);
+                                    while(curr < end) {
+                                      selectedTimes.add(minsToTime(curr));
+                                      curr += 30;
+                                    }
+                                  });
+
+                                  return ALL_TIME_SLOTS.map(t => {
+                                    const isSelected = selectedTimes.has(t);
+                                    const nextTime = minsToTime(timeToMins(t) + 30);
+                                    
+                                    return (
+                                      <button
+                                        key={t}
+                                        onClick={() => {
+                                          const nextSet = new Set(selectedTimes);
+                                          if (nextSet.has(t)) nextSet.delete(t);
+                                          else nextSet.add(t);
+                                          
+                                          const newSlots = consolidateAvailability(Array.from(nextSet));
+                                          setEditingAvailability({ ...editingAvailability, slots: newSlots });
+                                        }}
+                                        className={`py-3 text-[12px] rounded-xl border transition-all flex flex-col items-center justify-center gap-0.5 ${
+                                          isSelected 
+                                            ? 'bg-white text-stone-900 border-stone-300 shadow-lg ring-1 ring-stone-900/5 transform scale-105 z-10' 
+                                            : 'bg-stone-200/50 text-stone-500 border-transparent hover:bg-stone-200 hover:text-stone-700'
+                                        }`}
+                                      >
+                                        <span className={`font-black ${isSelected ? 'text-[13px]' : ''}`}>{t}</span>
+                                        <span className={`opacity-60 text-[9px] font-medium ${isSelected ? 'text-stone-500' : ''}`}>~{nextTime}</span>
+                                      </button>
+                                    );
+                                  });
+                                })()}
+                            </div>
+                        </div>
+                        
+                        <div className="p-6 bg-stone-50 border-none flex gap-3">
+                            <button
+                                onClick={() => setEditingAvailability(null)}
+                                className="px-6 py-3.5 text-stone-500 font-bold rounded-2xl hover:bg-stone-200 transition text-sm active:scale-95 bg-stone-100 border border-stone-200"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (editingAvailability.slots.length === 0) {
+                                        db.deleteAvailability(`${selectedTherapistPortal}_${editingAvailability.date}`);
+                                    } else {
+                                        db.saveAvailability({
+                                            id: `${selectedTherapistPortal}_${editingAvailability.date}`,
+                                            therapistName: selectedTherapistPortal,
+                                            date: editingAvailability.date,
+                                            slots: editingAvailability.slots
+                                        });
+                                    }
+                                    setAvailabilities(db.getAvailability());
+                                    setEditingAvailability(null);
+                                }}
+                                className="flex-1 py-3.5 bg-stone-800 text-white font-black rounded-2xl hover:bg-stone-900 transition shadow-[0_10px_25px_rgba(0,0,0,0.2)] text-sm active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <CheckCircle className="w-5 h-5" /> 儲存排班設定
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Appointment Lists Modal */}
+            {viewingAppts && (
+              <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95">
+                  <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50">
+                    <h3 className="font-medium text-stone-800 flex items-center gap-2">
+                       <Calendar className="w-4 h-4 text-stone-500" />
+                       {viewingAppts === 'today' ? '今日預約列表' : '所有歷史預約紀錄'}
+                    </h3>
+                    <button onClick={() => setViewingAppts(null)} className="p-1 hover:bg-stone-200 rounded-full transition">
+                       <XCircle className="w-5 h-5 text-stone-400" />
+                    </button>
+                  </div>
+                  <div className="p-6 overflow-y-auto grow bg-white">
+                    <div className="space-y-3">
+                      {(() => {
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        const list = orders.filter(o => 
+                          o.therapistPreference === selectedTherapistPortal && 
+                          o.status !== 'cancelled' &&
+                          (viewingAppts === 'today' ? o.date === todayStr : true)
+                        ).sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+
+                        if (list.length === 0) return <div className="text-center py-20 text-stone-300">目前尚無紀錄</div>;
+
+                        return list.map(o => {
+                          const m = members.find(x => x.id === o.memberId);
+                          return (
+                            <div key={o.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 border border-stone-100 rounded-xl hover:bg-stone-50 transition border-l-4 border-l-emerald-500 shadow-sm">
+                               <div className="flex items-center gap-4">
+                                  <div className="text-center min-w-[60px]">
+                                    <div className="text-[10px] text-stone-400">{o.date}</div>
+                                    <div className="text-lg font-bold text-stone-800">{o.time}</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-stone-800">{m?.name || '客戶'} ({m?.gender})</div>
+                                    <div className="text-xs text-stone-400">時長：{o.totalDuration} 分鐘</div>
+                                  </div>
+                               </div>
+                               <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
+                                  {o.items.map((item, idx) => (
+                                    <span key={idx} className="px-2 py-1 bg-stone-100 text-stone-500 rounded text-[10px]">{item.name}</span>
+                                  ))}
+                               </div>
+                               <button 
+                                  onClick={() => handleShare(o)}
+                                  className="text-xs text-emerald-600 hover:text-emerald-700 font-medium px-3 py-1 border border-emerald-100 rounded-lg bg-emerald-50 whitespace-nowrap mt-2 md:mt-0"
+                                >
+                                  複製通知
+                                </button>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
-
-      </div>
 
 
 
@@ -1106,9 +2067,14 @@ export default function Backend() {
         const targetLevel = bonusModal.level;
         const targetMonth = bonusModal.month;
         
-        const levelMembers = members.filter(m => m.level === targetLevel);
+        const levelMembers = members.filter(m => 
+          m.level === targetLevel && 
+          m.referredBy === tAuthName && 
+          m.referredMonth === targetMonth
+        );
         
         const handleToggle = (m: Member, isChecked: boolean) => {
+           if (!isAdmin) return;
            if (isChecked) {
               db.saveMember({ ...m, referredBy: tAuthName, referredMonth: targetMonth });
            } else {
@@ -1121,36 +2087,23 @@ export default function Backend() {
           <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200 max-h-[80vh] flex flex-col">
               <div className="p-4 border-b border-stone-100 flex justify-between items-center">
-                <h3 className="font-medium text-lg text-stone-800">{tAuthName} 的締結會員 ({targetLevel})</h3>
+                <h3 className="font-medium text-lg text-stone-800">{tAuthName} 的本月締結 ({targetLevel})</h3>
                 <button onClick={() => setBonusModal(null)} className="text-stone-400 hover:text-stone-600">
                    <XCircle className="w-5 h-5"/>
                 </button>
               </div>
               <div className="p-4 overflow-y-auto flex-1 space-y-2">
-                 {levelMembers.length === 0 && <p className="text-sm text-stone-400">目前沒有 {targetLevel} 會員</p>}
-                 {levelMembers.map(m => {
-                    const isChecked = m.referredBy === tAuthName && m.referredMonth === targetMonth;
-                    const isOther = !isChecked && m.referredBy && m.referredMonth === targetMonth;
-                    
-                    return (
-                       <label key={m.id} className={`flex items-center space-x-3 p-3 rounded-lg border ${isChecked ? 'border-emerald-200 bg-emerald-50' : 'border-stone-200 hover:bg-stone-50'} cursor-pointer transition`}>
-                          <input 
-                            type="checkbox" 
-                            checked={isChecked} 
-                            disabled={isOther}
-                            onChange={(e) => handleToggle(m, e.target.checked)}
-                            className="rounded border-stone-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-                          />
-                          <div className="flex-1">
-                            <p className="font-medium text-sm text-stone-800">{m.name} <span className="text-xs text-stone-500 font-normal ml-2">{m.id}</span></p>
-                            {isOther && <p className="text-[10px] text-orange-500 mt-0.5">已由 {m.referredBy} 於 {m.referredMonth} 締結</p>}
-                            {m.referredBy && m.referredMonth && !isOther && !isChecked && (
-                               <p className="text-[10px] text-stone-400 mt-0.5">已由 {m.referredBy} 於 {m.referredMonth} 締結 (非本月)</p>
-                            )}
-                          </div>
-                       </label>
-                    );
-                 })}
+                 {levelMembers.length === 0 && <p className="text-sm text-stone-400">本月目前沒有隸屬您的 {targetLevel} 會員</p>}
+                 {levelMembers.map(m => (
+                    <div key={m.id} className="flex items-center space-x-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50 transition">
+                       <div className="flex-1">
+                         <div className="flex justify-between items-start">
+                           <p className="font-medium text-sm text-stone-800">{m.name} <span className="text-xs text-stone-500 font-normal ml-2">{m.id}</span></p>
+                           <p className="text-xs text-stone-500 font-mono">{m.phone}</p>
+                         </div>
+                       </div>
+                    </div>
+                 ))}
               </div>
               <div className="p-4 border-t border-stone-100">
                  <button onClick={() => setBonusModal(null)} className="w-full py-2 bg-stone-800 text-white rounded-lg hover:bg-stone-700 transition">完成</button>
@@ -1253,6 +2206,7 @@ export default function Backend() {
         </div>
       )}
 
+      </div>
     </div>
   );
 }
