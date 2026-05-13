@@ -671,7 +671,7 @@ export default function Frontend() {
 
                     const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
                     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-                    const startingDayOfWeek = firstDayOfMonth.getDay();
+                    const startingDayOfWeek = (firstDayOfMonth.getDay() + 6) % 7;
                     
                     const days = [];
                     // Padding for previous month
@@ -740,7 +740,7 @@ export default function Frontend() {
                           </button>
                         </div>
                         <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                          {['日', '一', '二', '三', '四', '五', '六'].map(w => (
+                          {['一', '二', '三', '四', '五', '六', '日'].map(w => (
                             <div key={w} className="text-[10px] font-bold text-stone-400 uppercase tracking-widest py-1">
                               {w}
                             </div>
