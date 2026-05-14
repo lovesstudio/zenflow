@@ -1,5 +1,5 @@
 import { firestoreDb } from './firebase';
-import { doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
 
 export type MemberLevel = '一般' | '金卡' | '黑卡';
 export type Gender = '男' | '女';
@@ -32,6 +32,7 @@ export interface Member {
   membershipEndDate?: string;
   createdAt: number;
   role?: 'member' | 'therapist' | 'admin';
+  roles?: ('member' | 'therapist' | 'admin')[];
   password?: string;
   therapistName?: string; // Links member account to a specific therapist name
 }
@@ -117,7 +118,7 @@ export const db = {
     }
   },
 
-  updateMemberInfo: (oldId: string, name: string, gender: Gender, birthday: string, phone: string, level: MemberLevel, lineId?: string, referredBy?: string, referredMonth?: string, primaryTherapist?: string, membershipStartDate?: string, membershipEndDate?: string, role?: 'member' | 'therapist' | 'admin', password?: string, therapistName?: string) => {
+  updateMemberInfo: (oldId: string, name: string, gender: Gender, birthday: string, phone: string, level: MemberLevel, lineId?: string, referredBy?: string, referredMonth?: string, primaryTherapist?: string, membershipStartDate?: string, membershipEndDate?: string, role?: 'member' | 'therapist' | 'admin', password?: string, therapistName?: string, roles?: ('member' | 'therapist' | 'admin')[]) => {
     const members = db.getMembers();
     const idx = members.findIndex(x => x.id === oldId);
     if (idx >= 0) {
@@ -130,6 +131,7 @@ export const db = {
       if (membershipStartDate !== undefined) updatedMember.membershipStartDate = membershipStartDate;
       if (membershipEndDate !== undefined) updatedMember.membershipEndDate = membershipEndDate;
       if (role !== undefined) updatedMember.role = role;
+      if (roles !== undefined) updatedMember.roles = roles;
       if (password !== undefined) updatedMember.password = password;
       if (therapistName !== undefined) updatedMember.therapistName = therapistName;
 
@@ -156,6 +158,13 @@ export const db = {
 
   getMemberByPhone: (phone: string): Member | undefined => {
     return db.getMembers().find(m => m.id === phone);
+  },
+
+  deleteMember: (id: string) => {
+    let members = db.getMembers();
+    members = members.filter(m => m.id !== id);
+    localStorage.setItem('zf_members', JSON.stringify(members));
+    try { deleteDoc(doc(firestoreDb, 'members', id)).catch(console.error); } catch(e){}
   },
 
   getOrders: (): Order[] => {
@@ -205,6 +214,57 @@ export const db = {
     items = items.filter(x => x.id !== id);
     localStorage.setItem('zf_availability', JSON.stringify(items));
     try { deleteDoc(doc(firestoreDb, 'availability', id)).catch(console.error); } catch(e){}
+  },
+
+  syncMembers: async () => {
+    try {
+      const querySnapshot = await getDocs(collection(firestoreDb, 'members'));
+      const members: Member[] = [];
+      querySnapshot.forEach((doc) => {
+        members.push(doc.data() as Member);
+      });
+      if (members.length > 0) {
+        localStorage.setItem('zf_members', JSON.stringify(members));
+      }
+      return members;
+    } catch (error) {
+      console.error("Error syncing members:", error);
+      return db.getMembers();
+    }
+  },
+
+  syncOrders: async () => {
+    try {
+      const querySnapshot = await getDocs(collection(firestoreDb, 'orders'));
+      const orders: Order[] = [];
+      querySnapshot.forEach((doc) => {
+        orders.push(doc.data() as Order);
+      });
+      if (orders.length > 0) {
+        localStorage.setItem('zf_orders', JSON.stringify(orders));
+      }
+      return orders;
+    } catch (error) {
+      console.error("Error syncing orders:", error);
+      return db.getOrders();
+    }
+  },
+
+  syncAvailability: async () => {
+    try {
+      const querySnapshot = await getDocs(collection(firestoreDb, 'availability'));
+      const items: TherapistAvailability[] = [];
+      querySnapshot.forEach((doc) => {
+        items.push(doc.data() as TherapistAvailability);
+      });
+      if (items.length > 0) {
+        localStorage.setItem('zf_availability', JSON.stringify(items));
+      }
+      return items;
+    } catch (error) {
+      console.error("Error syncing availability:", error);
+      return db.getAvailability();
+    }
   },
 
   updateOrder: (id: string, updates: Partial<Order>) => {
