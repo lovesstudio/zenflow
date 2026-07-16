@@ -1,0 +1,385 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --color-sage-50: #FAF9F6;
+  --color-sage-100: #E6EAE3;
+  --color-sage-200: #CED6C9;
+  --color-sage-300: #B2BEAC;
+  --color-sage-400: #93A48C;
+  --color-sage-500: #7D8F76;
+  --color-sage-600: #62725C;
+  --color-sage-700: #4B5746;
+  --color-sage-800: #353D32;
+  --color-sage-900: #20251E;
+}
+
+html {
+  font-variant-numeric: tabular-nums;
+  scrollbar-gutter: stable;
+  overflow-x: hidden;
+}
+
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.zen-flow-wordmark {
+  font-family: "Manrope", "Helvetica Neue", Arial, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.backend-nav-tile {
+  height: 3.55rem;
+  min-height: 3.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.member-edit-field {
+  height: 2.5rem;
+  min-height: 2.5rem;
+  box-sizing: border-box;
+  line-height: 1.25rem;
+}
+
+input.member-edit-field,
+select.member-edit-field,
+button.member-edit-field {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Custom Scrollbar for better visibility as requested by user */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #93A48C #FAF9F6; /* sage-400, sage-50 */
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  display: block !important;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #FAF9F6;
+  border-radius: 99px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #CED6C9; /* sage-200 */
+  border-radius: 99px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #93A48C; /* sage-400 */
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Tablet readability boost. iPad mini portrait is below Tailwind's md breakpoint,
+   while larger iPads still benefit from a calmer proportional scale. */
+@media (min-width: 700px) and (max-width: 1180px) {
+  html {
+    font-size: 20px;
+  }
+
+  body {
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+
+  .text-\[8px\],
+  .text-\[9px\],
+  .text-\[10px\],
+  .text-\[11px\],
+  .text-xs {
+    font-size: 0.9rem !important;
+    line-height: 1.35rem !important;
+  }
+
+  .text-\[12px\],
+  .text-\[13px\],
+  .text-sm {
+    font-size: 1.05rem !important;
+    line-height: 1.55rem !important;
+  }
+
+  .text-base {
+    font-size: 1.18rem !important;
+    line-height: 1.7rem !important;
+  }
+
+  .text-lg {
+    font-size: 1.32rem !important;
+    line-height: 1.9rem !important;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    min-height: 3rem;
+  }
+
+  .backend-page-title {
+    font-size: 1.55rem !important;
+    line-height: 2rem !important;
+  }
+
+  .backend-page-subtitle {
+    font-size: 0.95rem !important;
+    line-height: 1.35rem !important;
+  }
+
+  .member-list-table th {
+    font-size: 0.92rem !important;
+    line-height: 1.2rem !important;
+  }
+
+  .member-name-cell {
+    padding-left: 1.25rem !important;
+  }
+
+  .member-name-text {
+    font-size: 1.12rem !important;
+    line-height: 1.35rem !important;
+    font-weight: 800 !important;
+  }
+
+  .member-identity-pill {
+    width: 8.7rem !important;
+    font-size: 0.95rem !important;
+    line-height: 1.2rem !important;
+    min-height: 2.25rem !important;
+  }
+
+  .member-edit-field {
+    min-height: 3rem !important;
+    font-size: 1rem !important;
+    line-height: 1.35rem !important;
+  }
+
+  .member-fitness-plan-select {
+    font-size: 0.9rem !important;
+  }
+
+  .massage-course-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) !important;
+    gap: 0.5rem !important;
+  }
+
+  .massage-course-select {
+    font-size: 0.7rem !important;
+    line-height: 1rem !important;
+    padding-left: 0.45rem !important;
+    padding-right: 1.15rem !important;
+    background-position: right 0.35rem center !important;
+    background-size: 0.68rem !important;
+    white-space: nowrap;
+  }
+
+  .massage-addon-select {
+    font-size: 0.68rem !important;
+  }
+
+  .backend-nav-tile {
+    height: 3.35rem !important;
+    min-height: 3.35rem !important;
+    font-size: 1.05rem !important;
+    line-height: 1.25rem !important;
+  }
+
+  .backend-revenue-label {
+    font-size: 0.72rem !important;
+    line-height: 0.9rem !important;
+  }
+
+  .backend-revenue-amount {
+    font-size: 0.9rem !important;
+    line-height: 1.05rem !important;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+.massage-latest-time {
+  white-space: nowrap;
+}
+
+.massage-policy-nowrap {
+  white-space: nowrap;
+}
+
+@media (max-width: 430px) {
+  .massage-latest-time {
+    font-size: 0.7rem !important;
+    line-height: 1rem !important;
+    letter-spacing: 0 !important;
+  }
+
+  .massage-policy-nowrap {
+    font-size: 0.61rem !important;
+    line-height: 0.95rem !important;
+    letter-spacing: 0 !important;
+  }
+}
+
+.backend-page-title {
+  font-size: 1.0625rem;
+  line-height: 1.5rem;
+  font-weight: 900;
+  color: #1c1917;
+  letter-spacing: 0.025em;
+}
+
+.backend-page-subtitle {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: #a8a29e;
+  font-weight: 600;
+}
+
+@media (max-width: 380px) {
+  .staff-login-title {
+    font-size: 0.98rem !important;
+    gap: 0.35rem !important;
+  }
+}
+/* Booking notices are long-form reading surfaces on phones and tablets. */
+.booking-notice > button {
+  min-height: 36px;
+  padding: 0.25rem;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.booking-notice > button span > span:first-child {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.booking-notice > button span > span:last-child {
+  font-size: 0.8125rem;
+  line-height: 1.2;
+}
+
+.booking-notice > div {
+  margin-top: 0;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  color: #57534e;
+}
+
+.booking-notice > div > p,
+.booking-notice > div > div {
+  padding: 0.875rem;
+}
+
+.booking-notice > div > div {
+  row-gap: 0.625rem;
+}
+
+.booking-notice > div > div > p:first-child {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  font-weight: 800;
+  color: #292524;
+}
+
+.booking-notice strong {
+  font-weight: 800;
+  color: #292524;
+}
+
+@media (min-width: 640px) {
+  .booking-notice > button span > span:first-child {
+    font-size: 1rem;
+  }
+
+  .booking-notice > button span > span:last-child,
+  .booking-notice > div {
+    font-size: 0.875rem;
+  }
+
+  .booking-notice > div > div > p:first-child {
+    font-size: 0.9375rem;
+  }
+}
+
+/* Frontend reading scale: keep operational micro-labels compact, but never make
+   customer-facing explanations or staff introductions difficult to read. */
+@media (max-width: 639px) {
+  .frontend-customer-ui p.text-\[10px\],
+  .frontend-customer-ui p.text-\[11px\],
+  .frontend-customer-ui p.text-xs {
+    font-size: 0.8125rem !important;
+    line-height: 1.6 !important;
+  }
+
+  .frontend-customer-ui section label.text-\[10px\],
+  .frontend-customer-ui section label.text-\[11px\] {
+    font-size: 0.75rem !important;
+    line-height: 1.4 !important;
+  }
+
+  .frontend-customer-ui .customer-profile-name {
+    font-size: 1.0625rem !important;
+  }
+
+  .frontend-customer-ui .customer-profile-title,
+  .frontend-customer-ui .customer-profile-specialty {
+    font-size: 0.75rem !important;
+    line-height: 1.45 !important;
+  }
+
+  .frontend-customer-ui .customer-profile-bio {
+    font-size: 0.875rem !important;
+    line-height: 1.7 !important;
+    color: #57534e !important;
+  }
+
+  .member-detail-panel .text-\[10px\] {
+    font-size: 0.75rem !important;
+    line-height: 1.45 !important;
+  }
+
+  .member-detail-panel .text-\[11px\],
+  .member-detail-panel .text-xs {
+    font-size: 0.8125rem !important;
+    line-height: 1.55 !important;
+  }
+
+  .member-detail-panel label.text-\[10px\],
+  .member-detail-panel label.text-\[11px\] {
+    font-weight: 700 !important;
+    color: #57534e !important;
+  }
+}
