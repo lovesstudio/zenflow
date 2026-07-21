@@ -389,6 +389,24 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   
   useEffect(() => {
+    fetch('/api/auth/session', { credentials: 'same-origin' })
+      .then(response => response.ok ? response.json() : { authenticated: false })
+      .then(session => {
+        if (!session.authenticated || !session.member) return;
+        const lineMember = session.member as Member;
+        setMember(lineMember);
+        setPhone(lineMember.id);
+        localStorage.removeItem('zf_authed_user');
+        localStorage.setItem('zf_login_phone', lineMember.id);
+        window.dispatchEvent(new Event('zf-auth-change'));
+        setFrontendTab(canAccessVenueBooking(lineMember) ? 'venue' : 'booking');
+        setStep(2);
+        if (new URLSearchParams(window.location.search).get('lineLogin') === 'success') {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      })
+      .catch(error => console.warn('LINE session check failed', error));
+
     // Initial sync
     db.syncMembers().then(members => {
       setStaffLoginAccounts(members.filter(account =>
@@ -776,7 +794,8 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                amount: currentOrder.finalPrice,
-               transactionId
+               transactionId,
+               orderId
             })
          }).then(res => res.json()).then(result => {
               if (result.returnCode === '0000') {
@@ -892,6 +911,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   };
   
   const handleLogout = () => {
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => undefined);
     localStorage.removeItem('zf_login_phone');
     localStorage.removeItem('zf_authed_user');
     window.dispatchEvent(new Event('zf-auth-change'));
@@ -2044,6 +2064,16 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
 
                           {!isRegistering && (
                             <div className="space-y-4">
+                              <button
+                                type="button"
+                                onClick={() => window.location.assign('/api/auth/line/start?returnTo=/')}
+                                className="w-full py-4 bg-[#06C755] text-white rounded-xl hover:bg-[#05b74d] transition duration-200 flex items-center justify-center font-black text-base shadow-sm"
+                              >
+                                使用 LINE 快捷登入
+                              </button>
+                              <div className="flex items-center gap-3 text-xs font-bold text-stone-400" aria-hidden="true">
+                                <span className="h-px flex-1 bg-stone-200" />或使用手機號碼<span className="h-px flex-1 bg-stone-200" />
+                              </div>
                               <button 
                                 onClick={handleLogin} 
                                 className="w-full py-4 bg-sage-800 text-white rounded-xl hover:bg-sage-700 transition duration-200 mt-2 flex items-center justify-center font-bold text-base shadow-sm"
