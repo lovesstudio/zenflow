@@ -33,8 +33,10 @@ const parseBirthdayString = (input: string): string => {
 };
 
 const getZodiacSign = (dateStr: string) => {
-  if (!dateStr || !dateStr.includes('-')) return '';
-  const [year, month, day] = dateStr.split('-').map(Number);
+  if (!dateStr) return '';
+  const parsed = parseBirthdayString(dateStr);
+  if (!parsed || !parsed.includes('-')) return '';
+  const [year, month, day] = parsed.split('-').map(Number);
   if (!month || !day) return '';
   const signs = ["摩羯座", "水瓶座", "雙魚座", "牡羊座", "金牛座", "雙子座", "巨蟹座", "獅子座", "處女座", "天秤座", "天蠍座", "射手座", "摩羯座"];
   const cutoffs = [20, 19, 21, 20, 21, 22, 23, 23, 23, 24, 22, 22];
@@ -43,14 +45,17 @@ const getZodiacSign = (dateStr: string) => {
 
 const getAge = (dateStr: string) => {
   if (!dateStr) return '';
+  const parsed = parseBirthdayString(dateStr);
+  if (!parsed || !parsed.includes('-')) return '';
+  const [year, month, day] = parsed.split('-').map(Number);
+  if (!year || !month || !day) return '';
   const today = new Date();
-  const birthDate = new Date(dateStr);
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+  let age = today.getFullYear() - year;
+  const m = (today.getMonth() + 1) - month;
+  if (m < 0 || (m === 0 && today.getDate() < day)) {
     age--;
   }
-  return age > 0 ? `${age}歲` : '';
+  return age >= 0 ? `${age}歲` : '';
 };
 
 const stripGender = (name: string) => name ? name.replace(/\(男\)|\(女\)|（男）|（女）/g, '').trim() : '';
@@ -3125,22 +3130,30 @@ export default function Backend() {
                                     <div className="text-[11px] text-emerald-950 font-black mb-1">年齡</div>
                                     <div className="text-sm font-black text-stone-800 whitespace-nowrap">
                                       {getAge(m.birthday) || '未設定'}
-                                      {m.birthday && (
-                                        <span className="text-[10px] font-bold text-stone-500 ml-1.5">
-                                          ({parseInt(m.birthday.split('-')[0]) - 1911}年次)
-                                        </span>
-                                      )}
+                                      {m.birthday && (() => {
+                                        const norm = parseBirthdayString(m.birthday);
+                                        const yr = norm ? parseInt(norm.split('-')[0], 10) : NaN;
+                                        return !isNaN(yr) && yr > 1911 ? (
+                                          <span className="text-[10px] font-bold text-stone-500 ml-1.5">
+                                            ({yr - 1911}年次)
+                                          </span>
+                                        ) : null;
+                                      })()}
                                     </div>
                                   </div>
                                   <div className="rounded-lg bg-white/55 px-3 py-2 border border-emerald-100/70">
                                     <div className="text-[11px] text-emerald-950 font-black mb-1">星座</div>
                                     <div className="text-sm font-black text-stone-800 whitespace-nowrap">
                                       {getZodiacSign(m.birthday) || '未設定'}
-                                      {m.birthday && (
-                                        <span className="text-[10px] font-bold text-stone-500 ml-1.5">
-                                          ({m.birthday.split('-').slice(1).map(v => parseInt(v)).join('/')})
-                                        </span>
-                                      )}
+                                      {m.birthday && (() => {
+                                        const norm = parseBirthdayString(m.birthday);
+                                        const pts = norm ? norm.split('-') : [];
+                                        return pts.length >= 3 ? (
+                                          <span className="text-[10px] font-bold text-stone-500 ml-1.5">
+                                            ({parseInt(pts[1], 10)}/{parseInt(pts[2], 10)})
+                                          </span>
+                                        ) : null;
+                                      })()}
                                     </div>
                                   </div>
                                   <button
