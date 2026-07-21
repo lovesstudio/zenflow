@@ -13,13 +13,14 @@ async function startServer() {
   app.use(express.json());
 
   // LINE Pay Config
-  const LINE_PAY_CHANNEL_ID = process.env.LINE_PAY_CHANNEL_ID || '2001461542';
-  const LINE_PAY_CHANNEL_SECRET = process.env.LINE_PAY_CHANNEL_SECRET || 'ede83729f93fd6d4f26cda8dd74ebaaf';
+  const LINE_PAY_CHANNEL_ID = process.env.LINE_PAY_CHANNEL_ID;
+  const LINE_PAY_CHANNEL_SECRET = process.env.LINE_PAY_CHANNEL_SECRET;
   const LINE_PAY_API_URL = process.env.LINE_PAY_API_URL || 'https://sandbox-api-pay.line.me';
 
   // API routes
   app.post("/api/linepay/request", async (req, res) => {
     try {
+      if (!LINE_PAY_CHANNEL_ID || !LINE_PAY_CHANNEL_SECRET) return res.status(503).json({ error: 'LINE Pay is not configured' });
       const { amount, currency = 'TWD', orderId, productName, confirmUrl, cancelUrl } = req.body;
       
       const uri = '/v3/payments/request';
@@ -75,6 +76,7 @@ async function startServer() {
 
   app.post("/api/linepay/confirm", async (req, res) => {
     try {
+      if (!LINE_PAY_CHANNEL_ID || !LINE_PAY_CHANNEL_SECRET) return res.status(503).json({ error: 'LINE Pay is not configured' });
       const { amount, currency = 'TWD', transactionId } = req.body;
       
       const uri = `/v3/payments/${transactionId}/confirm`;
@@ -110,6 +112,7 @@ async function startServer() {
 
   app.post("/api/linepay/refund", async (req, res) => {
     try {
+      if (!LINE_PAY_CHANNEL_ID || !LINE_PAY_CHANNEL_SECRET) return res.status(503).json({ error: 'LINE Pay is not configured' });
       const { transactionId, refundAmount } = req.body;
       if (!transactionId) {
         return res.status(400).json({ error: 'LINE Pay transactionId is required' });
