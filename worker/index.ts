@@ -247,7 +247,18 @@ async function patchDocument(env: Env, path: string, fields: Record<string, any>
 }
 
 type OAuthState = { state: string; nonce: string; verifier: string; returnTo: string; exp: number };
-type LoginSession = { memberId: string; lineUserId: string; exp: number };
+type SessionMember = {
+  id: string;
+  name: string;
+  birthday: string;
+  gender: string;
+  level: string;
+  role: string;
+  roles: string[];
+  lineUserId: string;
+  createdAt: number;
+};
+type LoginSession = { memberId: string; lineUserId: string; member?: SessionMember; exp: number };
 
 function requireLoginConfiguration(env: Env) {
   return Boolean(env.LINE_LOGIN_CHANNEL_ID && env.LINE_LOGIN_CHANNEL_SECRET && env.SESSION_SIGNING_SECRET);
@@ -422,21 +433,42 @@ async function finishLineLogin(request: Request, env: Env) {
       'FIREBASE_CLIENT_EMAIL',
       'FIREBASE_PRIVATE_KEY'
     ]);
+    const fallbackMember: SessionMember = {
+      id: `line_${profile.sub}`,
+      name: profile.name || 'LINE 會員',
+      birthday: '',
+      gender: '女',
+      level: '一般',
+      role: 'member',
+      roles: ['member'],
+      lineUserId: profile.sub,
+      createdAt: Date.now()
+    };
+    let member: any = fallbackMember;
     if (missingFirebaseBindings.length) {
-      return json({
-        ok: false,
-        error: 'FIREBASE_NOT_CONFIGURED',
-        stage,
-        missingBindings: missingFirebaseBindings,
-        requestId
-      }, 503);
+      console.warn('LINE Login continuing without Firebase persistence', {
+        requestId,
+        missingBindings: missingFirebaseBindings
+      });
+    } else {
+      member = await upsertLineMember(env, profile);
     }
-    const member = await upsertLineMember(env, profile);
 
     stage = 'session_creation';
     const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
       memberId: member.id,
       lineUserId: profile.sub,
+      member: {
+        id: member.id,
+        name: member.name || fallbackMember.name,
+        birthday: member.birthday || '',
+        gender: member.gender || '女',
+        level: member.level || '一般',
+        role: member.role || 'member',
+        roles: Array.isArray(member.roles) ? member.roles : ['member'],
+        lineUserId: profile.sub,
+        createdAt: Number(member.createdAt) || fallbackMember.createdAt
+      },
       exp: Date.now() + 30 * 24 * 60 * 60 * 1000
     } satisfies LoginSession);
     const redirect = new URL(stateCookie.returnTo, appOrigin(request, env));
@@ -461,9 +493,24 @@ async function getLoginSession(request: Request, env: Env) {
   if (!env.SESSION_SIGNING_SECRET) return json({ authenticated: false });
   const session = await verifySignedPayload<LoginSession>(env.SESSION_SIGNING_SECRET, getCookies(request).zf_session);
   if (!session || session.exp < Date.now()) return json({ authenticated: false });
-  const member = await getDocument(env, `members/${session.memberId}`);
-  if (!member || member.lineUserId !== session.lineUserId) return json({ authenticated: false });
-  return json({ authenticated: true, member });
+  const missingFirebaseBindings = missingBindings(env, [
+    'FIREBASE_PROJECT_ID',
+    'FIREBASE_CLIENT_EMAIL',
+    'FIREBASE_PRIVATE_KEY'
+  ]);
+  if (!missingFirebaseBindings.length) {
+    try {
+      const member = await getDocument(env, `members/${session.memberId}`);
+      if (member?.lineUserId === session.lineUserId) return json({ authenticated: true, member, persistence: 'firebase' });
+    } catch (error) {
+      console.warn('Firebase session lookup failed; using signed session fallback', {
+        memberId: session.memberId,
+        error: safeErrorMessage(error)
+      });
+    }
+  }
+  if (session.member?.lineUserId !== session.lineUserId) return json({ authenticated: false });
+  return json({ authenticated: true, member: session.member, persistence: 'session' });
 }
 
 function logoutLineSession() {
