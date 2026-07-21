@@ -251,10 +251,10 @@ const MassageCoursePicker = ({
 
 const getZodiacSign = (dateString: string) => {
   if (!dateString) return '';
-  const dateObj = new Date(dateString);
-  if (isNaN(dateObj.getTime())) return '';
-  const month = dateObj.getMonth() + 1;
-  const day = dateObj.getDate();
+  const parsed = parseBirthdayString(dateString);
+  if (!parsed || !parsed.includes('-')) return '';
+  const [year, month, day] = parsed.split('-').map(Number);
+  if (!month || !day) return '';
 
   if ((month === 1 && day <= 19) || (month === 12 && day >= 22)) return '摩羯座';
   if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return '水瓶座';
@@ -1911,7 +1911,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       <div className={`lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
         <div className={step === 1 ? 'text-center' : 'grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 min-[390px]:gap-3'}>
           <div className={step === 1 ? 'inline-flex flex-col items-stretch' : 'min-w-0 h-[62px] flex flex-col justify-between py-0.5'}>
-            <h1 className={`zen-flow-wordmark leading-[0.9] text-sage-900 whitespace-nowrap ${step === 1 ? 'text-[48px] min-[390px]:text-[54px] tracking-[0.02em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
+            <h1 className={`zen-flow-wordmark leading-[0.9] text-sage-900 whitespace-nowrap ${step === 1 ? 'text-[48px] min-[390px]:text-[54px] tracking-[0.02em]' : 'text-[30px] min-[390px]:text-[36px]'}`}>ZEN FLOW</h1>
             <p className={`${step === 1 ? 'mt-1 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.04em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
               {step === 1 ? (
                 <><span>Massage,</span><span>Fitness</span><span>&amp;</span><span>Nutrition</span></>
@@ -1934,42 +1934,42 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         <div className={step === 1 ? 'mt-2.5 text-center' : 'mt-3 pt-3 border-t border-sage-100'}>
           {step === 2 && member ? (
             <>
-              <p className="text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
+              <p className="text-[16px] sm:text-[18px] leading-snug font-black text-stone-900 break-words">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0">
-                  <span className="text-[13px] font-bold text-stone-500 shrink-0">生日</span>
-                  <span className="text-stone-300">|</span>
-                  <span className="text-[15px] font-black text-stone-800 whitespace-nowrap">{member.birthday}</span>
+                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2 flex items-center gap-1.5 min-w-0 overflow-hidden">
+                  <span className="text-[12px] min-[360px]:text-[13px] font-bold text-stone-500 shrink-0">生日</span>
+                  <span className="text-stone-300 shrink-0">|</span>
+                  <span className="text-[13px] min-[360px]:text-[14px] font-black text-stone-800 font-sans truncate min-w-0">{member.birthday ? member.birthday.replace(/-/g, '/') : '未設定'}</span>
                 </div>
-                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0">
-                  <span className="text-[13px] font-bold text-stone-500 shrink-0">星座</span>
-                  <span className="text-stone-300">|</span>
-                  <span className="text-[15px] font-black text-stone-800 whitespace-nowrap">{getZodiacSign(member.birthday)}</span>
+                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2 flex items-center gap-1.5 min-w-0 overflow-hidden">
+                  <span className="text-[12px] min-[360px]:text-[13px] font-bold text-stone-500 shrink-0">星座</span>
+                  <span className="text-stone-300 shrink-0">|</span>
+                  <span className="text-[13px] min-[360px]:text-[14px] font-black text-stone-800 truncate min-w-0">{getZodiacSign(member.birthday) || '未設定'}</span>
                 </div>
-                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0 overflow-hidden">
-                  <span className="text-[13px] font-bold text-stone-500 shrink-0">電話</span>
+                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2 flex items-center gap-1.5 min-w-0 overflow-hidden">
+                  <span className="text-[12px] min-[360px]:text-[13px] font-bold text-stone-500 shrink-0">電話</span>
                   <span className="text-stone-300 shrink-0">|</span>
                   {isUnboundPhone(member.id) ? (
                     <button
                       type="button"
                       onClick={openPhoneModal}
-                      className="min-w-0 text-[13px] font-bold text-amber-700 hover:text-amber-800 underline decoration-amber-400 underline-offset-2 flex items-center gap-1 cursor-pointer truncate"
+                      className="min-w-0 text-[12px] min-[360px]:text-[13px] font-bold text-amber-700 hover:text-amber-800 underline decoration-amber-400 underline-offset-2 flex items-center gap-1 cursor-pointer truncate"
                       title="點擊設定手機號碼"
                     >
                       <span className="truncate">未綁定（點擊設定）</span>
                     </button>
                   ) : (
-                    <span className="min-w-0 text-[14px] font-black text-stone-800 font-sans truncate">{member.id}</span>
+                    <span className="min-w-0 text-[13px] min-[360px]:text-[14px] font-black text-stone-800 font-sans truncate">{member.id}</span>
                   )}
                 </div>
-                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0 overflow-visible">
-                  <span className="text-[13px] font-bold text-stone-500 shrink-0">身分</span>
+                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2 flex items-center gap-1.5 min-w-0 overflow-visible">
+                  <span className="text-[12px] min-[360px]:text-[13px] font-bold text-stone-500 shrink-0">身分</span>
                   <span className="text-stone-300 shrink-0">|</span>
                   {welcomeIdentityLabels.length <= 1 ? (
-                    <span className="min-w-0 text-[14px] font-black text-sage-800 truncate">{welcomePrimaryIdentity}</span>
+                    <span className="min-w-0 text-[13px] min-[360px]:text-[14px] font-black text-sage-800 truncate">{welcomePrimaryIdentity}</span>
                   ) : (
                     <details className="relative inline-block min-w-0 group">
-                      <summary className="inline-flex items-center gap-0.5 text-[14px] font-black text-sage-800 cursor-pointer list-none truncate">
+                      <summary className="inline-flex items-center gap-0.5 text-[13px] min-[360px]:text-[14px] font-black text-sage-800 cursor-pointer list-none truncate">
                         <span className="truncate">{welcomePrimaryIdentity}</span><ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform shrink-0" />
                       </summary>
                       <div className="absolute right-0 top-full z-40 mt-1 min-w-[110px] rounded-md border border-sage-100 bg-white p-1.5 shadow-lg">
