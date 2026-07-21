@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db, COURSES, Member, Order, MemberLevel, timeToMins, minsToTime, Gender, ALL_TIME_SLOTS, sortOrderItems, TherapistAvailability, Promotion } from './store';
 import { Trash2, TrendingUp, Users, Calendar, DollarSign, Clock, Search, CheckCircle, XCircle, CalendarDays, Lock, LogOut, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Plus, User, X, Send } from 'lucide-react';
 
@@ -3872,13 +3872,13 @@ export default function Backend() {
       .filter(order => (order.items || []).length > 0)
       .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
 
-    const historyMonths = Array.from(new Set(assignedOrders.map(order => order.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
+    const historyMonths: string[] = Array.from(new Set<string>(assignedOrders.map(order => order.date.slice(0, 7)))).sort((a: string, b: string) => b.localeCompare(a));
     const visibleOrders = therapistHistoryMonth === null
       ? []
       : therapistHistoryMonth === 'all'
         ? assignedOrders
         : assignedOrders.filter(order => order.date.startsWith(therapistHistoryMonth));
-    const salaryMonths = historyMonths.filter(month => month < currentMonth);
+    const salaryMonths: string[] = historyMonths.filter((month: string) => month < currentMonth);
 
     const getMonthlySalary = (month: string) => {
       const monthOrders = assignedOrders.filter(order => order.date.startsWith(month) && order.status !== 'cancelled');
