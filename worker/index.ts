@@ -215,6 +215,17 @@ function requireLoginConfiguration(env: Env) {
   return Boolean(env.LINE_LOGIN_CHANNEL_ID && env.LINE_LOGIN_CHANNEL_SECRET && env.SESSION_SIGNING_SECRET);
 }
 
+function missingBindings(env: Env, names: Array<keyof Env>) {
+  return names.filter(name => !env?.[name]);
+}
+
+function safeErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || 'Unknown error');
+  return message
+    .replace(/(client_secret|access_token|id_token|assertion|private_key)["'=:\s]+[^\s&",}]+/gi, '$1=[REDACTED]')
+    .slice(0, 1500);
+}
+
 async function startLineLogin(request: Request, env: Env) {
   if (!requireLoginConfiguration(env)) return json({ error: 'LINE_LOGIN_NOT_CONFIGURED' }, 503);
   const url = new URL(request.url);
@@ -309,31 +320,96 @@ async function upsertLineMember(env: Env, profile: { sub: string; name?: string;
 }
 
 async function finishLineLogin(request: Request, env: Env) {
-  if (!requireLoginConfiguration(env)) return json({ error: 'LINE_LOGIN_NOT_CONFIGURED' }, 503);
-  const url = new URL(request.url);
-  const stateCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
-  const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state');
-  if (url.searchParams.get('error')) return json({ error: 'LINE_LOGIN_DENIED' }, 400);
-  if (!code || !stateCookie || stateCookie.exp < Date.now() || stateCookie.state !== state) return json({ error: 'INVALID_OR_EXPIRED_OAUTH_STATE' }, 400);
-  const tokens = await exchangeLineLoginCode(request, env, code, stateCookie.verifier);
-  const profile = await verifyLineIdToken(env, tokens.id_token, stateCookie.nonce);
-  if (!/^U[0-9a-f]{32}$/i.test(profile.sub)) return json({ error: 'INVALID_LINE_USER_ID' }, 400);
-  const member = await upsertLineMember(env, profile);
-  const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
-    memberId: member.id,
-    lineUserId: profile.sub,
-    exp: Date.now() + 30 * 24 * 60 * 60 * 1000
-  } satisfies LoginSession);
-  const redirect = new URL(stateCookie.returnTo, appOrigin(request, env));
-  redirect.searchParams.set('lineLogin', 'success');
-  const headers = new Headers({ location: redirect.toString() });
-  headers.append('set-cookie', cookie('zf_session', session, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000'));
-  headers.append('set-cookie', cookie('zf_oauth', '', 'HttpOnly; Secure; SameSite=Lax; Max-Age=0'));
-  return new Response(null, {
-    status: 302,
-    headers
-  });
+  const requestId = crypto.randomUUID();
+  let stage = 'configuration';
+  try {
+    const missingLoginBindings = missingBindings(env, [
+      'LINE_LOGIN_CHANNEL_ID',
+      'LINE_LOGIN_CHANNEL_SECRET',
+      'SESSION_SIGNING_SECRET'
+    ]);
+    if (missingLoginBindings.length) {
+      return json({
+        ok: false,
+        error: 'LINE_LOGIN_NOT_CONFIGURED',
+        stage,
+        missingBindings: missingLoginBindings,
+        requestId
+      }, 503);
+    }
+
+    stage = 'oauth_state_validation';
+    const url = new URL(request.url);
+    const stateCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    if (url.searchParams.get('error')) {
+      return json({ ok: false, error: 'LINE_LOGIN_DENIED', stage, lineError: url.searchParams.get('error'), requestId }, 400);
+    }
+    if (!code || !stateCookie || stateCookie.exp < Date.now() || stateCookie.state !== state) {
+      return json({
+        ok: false,
+        error: 'INVALID_OR_EXPIRED_OAUTH_STATE',
+        stage,
+        diagnostics: {
+          hasCode: Boolean(code),
+          hasOAuthCookie: Boolean(getCookies(request).zf_oauth),
+          validSignedCookie: Boolean(stateCookie),
+          stateMatches: Boolean(stateCookie && stateCookie.state === state),
+          stateExpired: Boolean(stateCookie && stateCookie.exp < Date.now())
+        },
+        requestId
+      }, 400);
+    }
+
+    stage = 'line_token_exchange';
+    const tokens = await exchangeLineLoginCode(request, env, code, stateCookie.verifier);
+
+    stage = 'line_id_token_verification';
+    const profile = await verifyLineIdToken(env, tokens.id_token, stateCookie.nonce);
+    if (!/^U[0-9a-f]{32}$/i.test(profile.sub)) {
+      return json({ ok: false, error: 'INVALID_LINE_USER_ID', stage, requestId }, 400);
+    }
+
+    stage = 'firebase_member_upsert';
+    const missingFirebaseBindings = missingBindings(env, [
+      'FIREBASE_PROJECT_ID',
+      'FIREBASE_CLIENT_EMAIL',
+      'FIREBASE_PRIVATE_KEY'
+    ]);
+    if (missingFirebaseBindings.length) {
+      return json({
+        ok: false,
+        error: 'FIREBASE_NOT_CONFIGURED',
+        stage,
+        missingBindings: missingFirebaseBindings,
+        requestId
+      }, 503);
+    }
+    const member = await upsertLineMember(env, profile);
+
+    stage = 'session_creation';
+    const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
+      memberId: member.id,
+      lineUserId: profile.sub,
+      exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+    } satisfies LoginSession);
+    const redirect = new URL(stateCookie.returnTo, appOrigin(request, env));
+    redirect.searchParams.set('lineLogin', 'success');
+    const headers = new Headers({ location: redirect.toString() });
+    headers.append('set-cookie', cookie('zf_session', session, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000'));
+    headers.append('set-cookie', cookie('zf_oauth', '', 'HttpOnly; Secure; SameSite=Lax; Max-Age=0'));
+    return new Response(null, { status: 302, headers });
+  } catch (error) {
+    console.error('LINE Login callback failed', { requestId, stage, error });
+    return json({
+      ok: false,
+      error: 'LINE_LOGIN_CALLBACK_FAILED',
+      stage,
+      message: safeErrorMessage(error),
+      requestId
+    }, 500);
+  }
 }
 
 async function getLoginSession(request: Request, env: Env) {
