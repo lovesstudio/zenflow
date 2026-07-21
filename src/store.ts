@@ -25,6 +25,7 @@ export interface Member {
   level: MemberLevel;
   memberLevel?: '一般' | '金卡' | '黑卡';
   lineId?: string;
+  lineUserId?: string;
   note?: string;
   referredBy?: string;
   referredMonth?: string;
@@ -69,6 +70,14 @@ export interface Order {
   promotionName?: string;
   promotionCode?: string;
   promotionDiscount?: number;
+  customerLineUserId?: string;
+  therapistMemberId?: string;
+  therapistLineUserId?: string;
+  receptionistLineUserId?: string;
+  lineNotificationSentPhases?: string[];
+  lineNotificationSentAt?: string;
+  lineNotificationRecipientCount?: number;
+  lineNotificationStatus?: 'sent' | 'failed';
   finalPrice: number;
   paymentMethod?: string;
   paymentStatus?: 'paid_rescheduled' | 'refunded' | 'refund_pending' | 'other';
