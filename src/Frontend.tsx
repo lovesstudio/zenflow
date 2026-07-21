@@ -533,6 +533,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     const newOrder: Order = {
       id: orderId,
       memberId: member.id,
+      customerLineUserId: member.lineUserId,
       date: venueDate,
       time: venueTime,
       status: 'pending',
@@ -1385,6 +1386,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       db.saveOrder({
         id: orderId,
         memberId: member.id,
+        customerLineUserId: member.lineUserId,
         date,
         time,
         paymentMethod: finalPrice > 0 ? '現場確認' : '無需付款',
@@ -1429,6 +1431,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     db.saveOrder({
       id: orderId,
       memberId: member.id,
+      customerLineUserId: member.lineUserId,
       date: isPureFitnessPlan ? new Date().toISOString().substring(0, 10) : date,
       time: isPureFitnessPlan ? '00:00' : time,
       paymentMethod: selectedPaymentMethod,
