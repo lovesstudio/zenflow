@@ -58,6 +58,12 @@ const fromBase64Url = (input: string) => {
   return new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
 };
 
+const base64UrlToBytes = (input: string) => {
+  const padded = input.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - input.length % 4) % 4);
+  const binary = atob(padded);
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+};
+
 const randomBase64Url = (byteLength = 32) => {
   const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
@@ -90,6 +96,38 @@ async function verifySignedPayload<T>(secret: string, signed: string | undefined
   for (let index = 0; index < expected.length; index += 1) mismatch |= expected.charCodeAt(index) ^ signature.charCodeAt(index);
   if (mismatch !== 0) return null;
   try { return JSON.parse(fromBase64Url(encoded)) as T; } catch { return null; }
+}
+
+async function oauthEncryptionKey(secret: string) {
+  const keyBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`zenflow-oauth-state:${secret}`));
+  return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptOAuthState(secret: string, payload: OAuthState) {
+  const iv = new Uint8Array(12);
+  crypto.getRandomValues(iv);
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    await oauthEncryptionKey(secret),
+    new TextEncoder().encode(JSON.stringify(payload))
+  );
+  return `${base64Url(iv)}.${base64Url(new Uint8Array(encrypted))}`;
+}
+
+async function decryptOAuthState(secret: string, encryptedState: string | null): Promise<OAuthState | null> {
+  if (!encryptedState) return null;
+  const [ivText, cipherText] = encryptedState.split('.');
+  if (!ivText || !cipherText) return null;
+  try {
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: base64UrlToBytes(ivText) },
+      await oauthEncryptionKey(secret),
+      base64UrlToBytes(cipherText)
+    );
+    return JSON.parse(new TextDecoder().decode(decrypted)) as OAuthState;
+  } catch {
+    return null;
+  }
 }
 
 function getCookies(request: Request) {
@@ -244,13 +282,14 @@ async function startLineLogin(request: Request, env: Env) {
     exp: Date.now() + 10 * 60 * 1000
   };
   const signedState = await signPayload(env.SESSION_SIGNING_SECRET!, oauthState);
+  const encryptedState = await encryptOAuthState(env.SESSION_SIGNING_SECRET!, oauthState);
   const redirectUri = `${appOrigin(request, env)}/api/auth/line/callback`;
   const authorize = new URL('https://access.line.me/oauth2/v2.1/authorize');
   authorize.search = new URLSearchParams({
     response_type: 'code',
     client_id: env.LINE_LOGIN_CHANNEL_ID!,
     redirect_uri: redirectUri,
-    state,
+    state: encryptedState,
     scope: 'openid profile',
     nonce,
     code_challenge: await sha256Base64Url(verifier),
@@ -261,7 +300,7 @@ async function startLineLogin(request: Request, env: Env) {
     status: 302,
     headers: {
       location: authorize.toString(),
-      'set-cookie': cookie('zf_oauth', signedState, 'HttpOnly; Secure; SameSite=Lax; Max-Age=600')
+      'set-cookie': cookie('zf_oauth', signedState, 'HttpOnly; Secure; SameSite=None; Max-Age=600')
     }
   });
 }
@@ -340,22 +379,28 @@ async function finishLineLogin(request: Request, env: Env) {
 
     stage = 'oauth_state_validation';
     const url = new URL(request.url);
-    const stateCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
+    const oauthCookie = getCookies(request).zf_oauth;
+    const cookieState = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, oauthCookie);
     const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state');
+    const returnedState = url.searchParams.get('state');
+    const encryptedState = await decryptOAuthState(env.SESSION_SIGNING_SECRET!, returnedState);
+    const stateCookie = cookieState || encryptedState;
+    const stateSourcesAgree = !cookieState || !encryptedState || cookieState.state === encryptedState.state;
     if (url.searchParams.get('error')) {
       return json({ ok: false, error: 'LINE_LOGIN_DENIED', stage, lineError: url.searchParams.get('error'), requestId }, 400);
     }
-    if (!code || !stateCookie || stateCookie.exp < Date.now() || stateCookie.state !== state) {
+    if (!code || !stateCookie || stateCookie.exp < Date.now() || !stateSourcesAgree) {
       return json({
         ok: false,
         error: 'INVALID_OR_EXPIRED_OAUTH_STATE',
         stage,
         diagnostics: {
           hasCode: Boolean(code),
-          hasOAuthCookie: Boolean(getCookies(request).zf_oauth),
-          validSignedCookie: Boolean(stateCookie),
-          stateMatches: Boolean(stateCookie && stateCookie.state === state),
+          hasOAuthCookie: Boolean(oauthCookie),
+          validSignedCookie: Boolean(cookieState),
+          validEncryptedState: Boolean(encryptedState),
+          recoveredFromEncryptedState: Boolean(!cookieState && encryptedState),
+          stateMatches: stateSourcesAgree,
           stateExpired: Boolean(stateCookie && stateCookie.exp < Date.now())
         },
         requestId
@@ -398,7 +443,7 @@ async function finishLineLogin(request: Request, env: Env) {
     redirect.searchParams.set('lineLogin', 'success');
     const headers = new Headers({ location: redirect.toString() });
     headers.append('set-cookie', cookie('zf_session', session, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000'));
-    headers.append('set-cookie', cookie('zf_oauth', '', 'HttpOnly; Secure; SameSite=Lax; Max-Age=0'));
+    headers.append('set-cookie', cookie('zf_oauth', '', 'HttpOnly; Secure; SameSite=None; Max-Age=0'));
     return new Response(null, { status: 302, headers });
   } catch (error) {
     console.error('LINE Login callback failed', { requestId, stage, error });
