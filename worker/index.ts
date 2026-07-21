@@ -445,13 +445,22 @@ async function finishLineLogin(request: Request, env: Env) {
       createdAt: Date.now()
     };
     let member: any = fallbackMember;
-    if (missingFirebaseBindings.length) {
-      console.warn('LINE Login continuing without Firebase persistence', {
+
+    if (missingFirebaseBindings.length > 0) {
+      console.warn('LINE Login skipping Firebase persistence due to missing Firebase credentials', {
         requestId,
         missingBindings: missingFirebaseBindings
       });
     } else {
-      member = await upsertLineMember(env, profile);
+      try {
+        member = await upsertLineMember(env, profile);
+      } catch (fbError) {
+        console.warn('Firebase member upsert failed, continuing with fallback session member', {
+          requestId,
+          error: safeErrorMessage(fbError)
+        });
+        member = fallbackMember;
+      }
     }
 
     stage = 'session_creation';
