@@ -2,6 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { db, COURSES, Member, Order, MemberLevel, timeToMins, minsToTime, Gender, ALL_TIME_SLOTS, sortOrderItems, TherapistAvailability, Promotion } from './store';
 import { Trash2, TrendingUp, Users, Calendar, DollarSign, Clock, Search, CheckCircle, XCircle, CalendarDays, Lock, LogOut, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Plus, User, X, Send } from 'lucide-react';
 
+const parseBirthdayString = (input: string): string => {
+  if (!input) return '';
+  const trimmed = input.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d{8}$/.test(trimmed)) {
+    const y = trimmed.slice(0, 4);
+    const m = trimmed.slice(4, 6);
+    const d = trimmed.slice(6, 8);
+    const mi = parseInt(m, 10);
+    const di = parseInt(d, 10);
+    if (mi >= 1 && mi <= 12 && di >= 1 && di <= 31) {
+      return `${y}-${m}-${d}`;
+    }
+  }
+  const match = trimmed.match(/^(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})$/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    const mi = parseInt(m, 10);
+    const di = parseInt(d, 10);
+    if (mi >= 1 && mi <= 12 && di >= 1 && di <= 31) {
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return trimmed;
+};
+
 const getZodiacSign = (dateStr: string) => {
   if (!dateStr || !dateStr.includes('-')) return '';
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -454,6 +484,7 @@ export default function Backend() {
   const [editLineId, setEditLineId] = useState('');
   const [editGender, setEditGender] = useState<any>('女');
   const [editBirthday, setEditBirthday] = useState('');
+  const [editBirthdayText, setEditBirthdayText] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editLevel, setEditLevel] = useState<MemberLevel>('一般');
   const [editMemberLevel, setEditMemberLevel] = useState<'一般' | '金卡' | '黑卡' | undefined>(undefined);
@@ -598,7 +629,8 @@ export default function Backend() {
     setEditName(m.name);
     setEditLineId(m.lineId || '');
     setEditGender(m.gender || '女');
-    setEditBirthday(m.birthday);
+    setEditBirthday(m.birthday || '');
+    setEditBirthdayText(m.birthday ? m.birthday.replace(/-/g, '/') : '');
     setEditPhone(m.id);
     setEditLevel(m.level);
     
@@ -653,7 +685,8 @@ export default function Backend() {
       setEditName(m.name);
       setEditLineId(m.lineId || '');
       setEditGender(m.gender || '女');
-      setEditBirthday(m.birthday);
+      setEditBirthday(m.birthday || '');
+      setEditBirthdayText(m.birthday ? m.birthday.replace(/-/g, '/') : '');
       setEditPhone(m.id);
       setEditLevel(m.level);
       setEditMemberLevel(m.memberLevel);
@@ -3277,7 +3310,19 @@ export default function Backend() {
                                     {(() => {
                                       const fieldClass = "member-edit-field w-full h-10 min-h-10 box-border text-[13px] leading-none px-2 py-0 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition";
                                       const labelClass = "block text-[10px] font-bold text-stone-500 mb-1";
-                                      const coachNames = coachMembers.map(cm => cm.therapistName || cm.name).filter(Boolean);
+                                      
+                                      // Exclude self (member m) from staff dropdowns if m is a coach or therapist
+                                      const selfNames = new Set([m.name, m.therapistName, m.id].filter(Boolean));
+                                      const coachNames = coachMembers
+                                        .filter(cm => cm.id !== m.id && cm.name !== m.name && (!m.therapistName || cm.therapistName !== m.therapistName))
+                                        .map(cm => cm.therapistName || cm.name)
+                                        .filter((name): name is string => Boolean(name) && !selfNames.has(name));
+
+                                      const therapistNamesForMember = linkedMassageMembers
+                                        .filter(tm => tm.id !== m.id && tm.name !== m.name && (!m.therapistName || tm.therapistName !== m.therapistName))
+                                        .map(tm => tm.therapistName || tm.name)
+                                        .filter((name): name is string => Boolean(name) && !selfNames.has(name));
+
                                       const completedCoachOrders = memberOrders
                                         .filter(o => o.status === 'completed' && (o.items || []).some(item => item.name.includes('1對1教練課')))
                                         .sort((a,b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
@@ -3302,18 +3347,53 @@ export default function Backend() {
                                             </div>
                                             <div>
                                               <label className={labelClass}>生日</label>
-                                              <div className="relative cursor-pointer">
+                                              <div className="relative flex items-center w-full bg-stone-50 border border-stone-200 rounded-lg focus-within:bg-white focus-within:border-stone-500 transition overflow-hidden">
                                                 <input 
-                                                  type="date" 
-                                                  value={editBirthday} 
-                                                  onChange={e=>setEditBirthday(e.target.value)} 
-                                                  onBlur={()=>handleInfoSave(m.id)} 
-                                                  onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
-                                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                                                  style={{ colorScheme: 'light' }}
+                                                  type="text" 
+                                                  value={editBirthdayText} 
+                                                  onChange={e => {
+                                                    const val = e.target.value;
+                                                    setEditBirthdayText(val);
+                                                    const parsed = parseBirthdayString(val);
+                                                    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+                                                      setEditBirthday(parsed);
+                                                      handleInfoSave(m.id, { birthday: parsed });
+                                                    } else {
+                                                      setEditBirthday(val);
+                                                    }
+                                                  }}
+                                                  onBlur={() => {
+                                                    const parsed = parseBirthdayString(editBirthdayText);
+                                                    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+                                                      setEditBirthday(parsed);
+                                                      setEditBirthdayText(parsed.replace(/-/g, '/'));
+                                                      handleInfoSave(m.id, { birthday: parsed });
+                                                    } else {
+                                                      handleInfoSave(m.id, { birthday: editBirthdayText });
+                                                    }
+                                                  }}
+                                                  placeholder="例: 1990/05/20 或點選日曆" 
+                                                  className={`${fieldClass} border-0 bg-transparent flex-1 focus:bg-transparent min-w-0 font-medium`}
                                                 />
-                                                <div className={`${fieldClass} flex items-center text-stone-800`}>
-                                                  <span className={editBirthday ? "" : "text-stone-400 truncate"}>{editBirthday ? editBirthday.replace(/-/g, '/') : '年/月/日'}</span>
+                                                <div className="relative shrink-0 pr-2 flex items-center justify-center cursor-pointer">
+                                                  <input 
+                                                    type="date" 
+                                                    value={editBirthday && /^\d{4}-\d{2}-\d{2}$/.test(editBirthday) ? editBirthday : ''} 
+                                                    onChange={e => {
+                                                      const val = e.target.value;
+                                                      if (val) {
+                                                        setEditBirthday(val);
+                                                        setEditBirthdayText(val.replace(/-/g, '/'));
+                                                        handleInfoSave(m.id, { birthday: val });
+                                                      }
+                                                    }} 
+                                                    onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
+                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                                    style={{ colorScheme: 'light' }}
+                                                  />
+                                                  <button type="button" className="p-1 text-stone-400 hover:text-stone-600 transition" title="開啟日曆選單">
+                                                    <Calendar className="w-3.5 h-3.5" />
+                                                  </button>
                                                 </div>
                                               </div>
                                             </div>
@@ -3358,7 +3438,7 @@ export default function Backend() {
                                                 handleInfoSave(m.id, { primaryTherapist: e.target.value });
                                               }} className={fieldClass}>
                                                 <option value="">(無)</option>
-                                                {[...maleTherapists, ...femaleTherapists].map(name => (
+                                                {therapistNamesForMember.map(name => (
                                                   <option key={name} value={name}>{name}</option>
                                                 ))}
                                               </select>
