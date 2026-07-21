@@ -1,9 +1,39 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, COURSES, Member, OrderItem, Order, calculateDiscount, ALL_TIME_SLOTS, isSlotAvailable, isDayAvailable, Gender, TherapistPreference, timeToMins, minsToTime, getDiscountStatus, sortOrderItems, TherapistAvailability, getSlotStatus, SlotStatus, isTimeRangeCovered, getDetailedSlotStatus, Promotion } from './store';
-import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X, ChevronLeft, ChevronDown, LogOut, ShieldAlert, Award, Star, Compass, MapPin } from 'lucide-react';
+import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X, ChevronLeft, ChevronDown, LogOut, ShieldAlert, Award, Star, Compass, MapPin, Smartphone, Edit2 } from 'lucide-react';
 
 const PAYMENT_COMPLETION_MESSAGE = '感謝您的預定，我們已為您鎖定專屬時段。\n\n線上預付限定的「15分鐘加值服務（價值 $300 元）」亦已準備就緒。\n\n當天體驗結束後，您可以直接帶著舒暢的身心優雅離開，期待與您相見！';
 const ONSITE_PAYMENT_COMPLETION_MESSAGE = '感謝您的預定，我們已為您鎖定專屬時段。\n\n期待與您相見！';
+
+const parseBirthdayString = (input: string): string => {
+  if (!input) return '';
+  const trimmed = input.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^\d{8}$/.test(trimmed)) {
+    const y = trimmed.slice(0, 4);
+    const m = trimmed.slice(4, 6);
+    const d = trimmed.slice(6, 8);
+    const mi = parseInt(m, 10);
+    const di = parseInt(d, 10);
+    if (mi >= 1 && mi <= 12 && di >= 1 && di <= 31) {
+      return `${y}-${m}-${d}`;
+    }
+  }
+  const match = trimmed.match(/^(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})$/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    const mi = parseInt(m, 10);
+    const di = parseInt(d, 10);
+    if (mi >= 1 && mi <= 12 && di >= 1 && di <= 31) {
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return trimmed;
+};
 
 const BookingNotice = ({ kind, expanded, onToggle }: { kind: 'massage' | 'fitness'; expanded: boolean; onToggle: () => void }) => {
   const isMassage = kind === 'massage';
@@ -373,6 +403,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   // Registration Form
   const [name, setName] = useState('');
   const [birthday, setBirthday] = useState('');
+  const [birthdayText, setBirthdayText] = useState('');
   const [lineId, setLineId] = useState('');
   const [gender, setGender] = useState<Gender>('女');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -382,6 +413,104 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   const [rememberStaffDevice, setRememberStaffDevice] = useState(true);
   const [rememberedStaffUsers, setRememberedStaffUsers] = useState<{ role: 'admin' | 'therapist'; name: string; phone: string }[]>([]);
   const [staffLoginAccounts, setStaffLoginAccounts] = useState<Member[]>([]);
+
+  // Phone Binding Modal
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [modalPhoneInput, setModalPhoneInput] = useState('');
+  const [modalPhoneError, setModalPhoneError] = useState('');
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
+
+  const isUnboundPhone = (phoneStr?: string) => {
+    if (!phoneStr) return true;
+    const p = phoneStr.trim();
+    return p.startsWith('line_') || p.length > 12;
+  };
+
+  const openPhoneModal = () => {
+    setModalPhoneInput(member && !isUnboundPhone(member.id) ? member.id : '');
+    setModalPhoneError('');
+    setShowPhoneModal(true);
+  };
+
+  const handleSavePhoneModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!member) return;
+
+    const trimmed = modalPhoneInput.trim();
+    if (!trimmed) {
+      setModalPhoneError('請輸入手機號碼');
+      return;
+    }
+
+    if (!/^09\d{8}$/.test(trimmed) && !/^\d{8,12}$/.test(trimmed)) {
+      setModalPhoneError('請輸入正確的手機號碼格式（例如：0912345678）');
+      return;
+    }
+
+    setIsSavingPhone(true);
+    try {
+      const oldId = member.id;
+      const newPhone = trimmed;
+
+      const allMembers = db.getMembers();
+      const existingMember = allMembers.find(m => m.id === newPhone && m.id !== oldId);
+
+      let nextMember: Member;
+
+      if (existingMember) {
+        nextMember = {
+          ...existingMember,
+          lineUserId: member.lineUserId || existingMember.lineUserId,
+          lineId: member.lineId || existingMember.lineId,
+        };
+        db.saveMember(nextMember);
+      } else {
+        nextMember = {
+          ...member,
+          id: newPhone
+        };
+
+        db.updateMemberInfo(
+          oldId,
+          member.name,
+          member.gender,
+          member.birthday,
+          newPhone,
+          member.level,
+          member.lineId,
+          member.referredBy,
+          member.referredMonth,
+          member.primaryTherapist,
+          member.membershipStartDate,
+          member.membershipEndDate,
+          member.role,
+          member.password,
+          member.therapistName,
+          member.roles,
+          member.memberLevel,
+          member.selectedIdentities,
+          member.fitnessPlan,
+          member.primaryCoach,
+          member.secondaryCoach
+        );
+      }
+
+      setMember(nextMember);
+      setPhone(newPhone);
+      localStorage.setItem('zf_login_phone', newPhone);
+      window.dispatchEvent(new Event('zf-auth-change'));
+
+      setShowPhoneModal(false);
+      setModalPhoneInput('');
+      setModalPhoneError('');
+      alert('手機號碼綁定成功！');
+    } catch (error) {
+      console.error('Failed to save phone number:', error);
+      setModalPhoneError('儲存失敗，請重試');
+    } finally {
+      setIsSavingPhone(false);
+    }
+  };
 
   // Polling for orders to check real-time availability
   const [allOrders, setAllOrders] = useState<Order[]>([]);
@@ -875,7 +1004,8 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   };
 
   const handleRegister = () => {
-    if (!name || !birthday || !phone) return;
+    const finalBirthday = parseBirthdayString(birthdayText) || birthday;
+    if (!name || !finalBirthday || !phone) return;
     
     // Double check if member already exists to prevent duplicates
     const existing = db.getMemberByPhone(phone);
@@ -888,6 +1018,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       setIsRegistering(false);
       setName('');
       setBirthday('');
+      setBirthdayText('');
       setLineId('');
       setStep(2);
       return;
@@ -896,7 +1027,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     const newMember: Member = {
       id: phone,
       name,
-      birthday,
+      birthday: finalBirthday,
       gender,
       lineId,
       level: '一般',
@@ -1716,6 +1847,65 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
           </div>
         </div>
       )}
+
+      {showPhoneModal && member && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-stone-950/50 p-4 backdrop-blur-xs" onClick={() => setShowPhoneModal(false)}>
+          <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-stone-100 bg-stone-50 px-4 py-3.5">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-amber-700" />
+                <h3 className="text-base font-black text-stone-900">設定／綁定手機號碼</h3>
+              </div>
+              <button type="button" onClick={() => setShowPhoneModal(false)} className="rounded-md p-1.5 text-stone-400 hover:bg-stone-200 hover:text-stone-700 transition" aria-label="關閉">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSavePhoneModal} className="p-4 sm:p-5 space-y-4">
+              <p className="text-[13px] font-semibold text-stone-600 leading-relaxed">
+                請補充您的手機號碼，以便店內專員現場核對預約資料：
+              </p>
+              
+              <div>
+                <label className="block text-[12px] font-bold text-stone-700 mb-1">手機號碼</label>
+                <input
+                  type="tel"
+                  value={modalPhoneInput}
+                  onChange={e => {
+                    setModalPhoneInput(e.target.value);
+                    setModalPhoneError('');
+                  }}
+                  placeholder="例如：0912345678"
+                  className="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2.5 text-sm font-bold text-stone-900 focus:border-sage-500 focus:outline-none focus:ring-1 focus:ring-sage-500"
+                  autoFocus
+                />
+                {modalPhoneError && (
+                  <p className="mt-1.5 text-xs font-bold text-rose-600 flex items-center gap-1">
+                    <span>⚠️</span> {modalPhoneError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPhoneModal(false)}
+                  className="px-4 py-2 rounded-lg border border-stone-200 text-stone-600 text-xs font-bold hover:bg-stone-50 transition"
+                >
+                  稍後再說
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPhone}
+                  className="px-4 py-2 rounded-lg bg-sage-800 hover:bg-sage-900 text-white text-xs font-bold transition shadow-sm disabled:opacity-50"
+                >
+                  {isSavingPhone ? '儲存中...' : '確認儲存'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       
       {/* HEADER FOR MOBILE / TABLET */}
       <div className={`lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
@@ -1756,20 +1946,31 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                   <span className="text-stone-300">|</span>
                   <span className="text-[15px] font-black text-stone-800 whitespace-nowrap">{getZodiacSign(member.birthday)}</span>
                 </div>
-                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0">
+                <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0 overflow-hidden">
                   <span className="text-[13px] font-bold text-stone-500 shrink-0">電話</span>
-                  <span className="text-stone-300">|</span>
-                  <span className="text-[14px] font-black text-stone-800 whitespace-nowrap">{member.id}</span>
+                  <span className="text-stone-300 shrink-0">|</span>
+                  {isUnboundPhone(member.id) ? (
+                    <button
+                      type="button"
+                      onClick={openPhoneModal}
+                      className="min-w-0 text-[13px] font-bold text-amber-700 hover:text-amber-800 underline decoration-amber-400 underline-offset-2 flex items-center gap-1 cursor-pointer truncate"
+                      title="點擊設定手機號碼"
+                    >
+                      <span className="truncate">未綁定（點擊設定）</span>
+                    </button>
+                  ) : (
+                    <span className="min-w-0 text-[14px] font-black text-stone-800 font-sans truncate">{member.id}</span>
+                  )}
                 </div>
                 <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0 overflow-visible">
                   <span className="text-[13px] font-bold text-stone-500 shrink-0">身分</span>
-                  <span className="text-stone-300">|</span>
+                  <span className="text-stone-300 shrink-0">|</span>
                   {welcomeIdentityLabels.length <= 1 ? (
-                    <span className="min-w-0 text-[14px] font-black text-sage-800 whitespace-nowrap">{welcomePrimaryIdentity}</span>
+                    <span className="min-w-0 text-[14px] font-black text-sage-800 truncate">{welcomePrimaryIdentity}</span>
                   ) : (
                     <details className="relative inline-block min-w-0 group">
-                      <summary className="inline-flex items-center gap-0.5 text-[14px] font-black text-sage-800 whitespace-nowrap cursor-pointer list-none">
-                        {welcomePrimaryIdentity}<ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
+                      <summary className="inline-flex items-center gap-0.5 text-[14px] font-black text-sage-800 cursor-pointer list-none truncate">
+                        <span className="truncate">{welcomePrimaryIdentity}</span><ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform shrink-0" />
                       </summary>
                       <div className="absolute right-0 top-full z-40 mt-1 min-w-[110px] rounded-md border border-sage-100 bg-white p-1.5 shadow-lg">
                         {welcomeIdentityLabels.map(label => <div key={label} className="whitespace-nowrap px-2 py-1 text-[11px] font-bold text-stone-600">{label}</div>)}
@@ -2003,18 +2204,48 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
 
                               <div>
                                 <label className="block text-sm font-medium text-stone-600 mb-1">生日</label>
-                                <div className="relative w-full cursor-pointer">
+                                <div className="relative flex items-center w-full bg-white border border-sage-200 rounded-xl focus-within:ring-2 focus-within:ring-sage-400 focus-within:border-sage-500 overflow-hidden transition">
                                   <input 
-                                    type="date" 
-                                    value={birthday} 
-                                    onChange={e => setBirthday(e.target.value)} 
-                                    onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                                    style={{ colorScheme: 'light' }}
+                                    type="text" 
+                                    value={birthdayText} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      setBirthdayText(val);
+                                      const parsed = parseBirthdayString(val);
+                                      if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+                                        setBirthday(parsed);
+                                      } else {
+                                        setBirthday(val);
+                                      }
+                                    }} 
+                                    onBlur={() => {
+                                      const parsed = parseBirthdayString(birthdayText);
+                                      if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
+                                        setBirthday(parsed);
+                                        setBirthdayText(parsed.replace(/-/g, '/'));
+                                      }
+                                    }}
+                                    placeholder="請輸入年月日 (例: 1990/05/20) 或點選日曆" 
+                                    className="w-full px-4 py-3 bg-transparent outline-none text-base font-sans font-medium text-stone-800 placeholder:text-stone-400"
                                   />
-                                  <div className="w-full px-4 py-3 bg-white border border-sage-200 rounded-xl text-stone-800 transition flex items-center justify-between text-base">
-                                    <span className={birthday ? "font-sans font-medium" : "text-stone-400"}>{birthday ? birthday.replace(/-/g, '/') : '年 / 月 / 日'}</span>
-                                    <CalendarIcon className="w-5 h-5 text-sage-400" />
+                                  <div className="relative shrink-0 pr-3 flex items-center justify-center cursor-pointer">
+                                    <input 
+                                      type="date" 
+                                      value={birthday && /^\d{4}-\d{2}-\d{2}$/.test(birthday) ? birthday : ''} 
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        if (val) {
+                                          setBirthday(val);
+                                          setBirthdayText(val.replace(/-/g, '/'));
+                                        }
+                                      }} 
+                                      onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
+                                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                      style={{ colorScheme: 'light' }}
+                                    />
+                                    <button type="button" className="p-1.5 rounded-lg text-sage-500 hover:text-sage-700 hover:bg-sage-50 transition" title="開啟日曆選單">
+                                      <CalendarIcon className="w-5 h-5" />
+                                    </button>
                                   </div>
                                 </div>
                               </div>
@@ -2248,11 +2479,38 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                 {/* STEP 2: DASHBOARD & ACTIVE BOOKING FLOW */}
                 {step === 2 && member && (
                   <div className="space-y-6 animate-in fade-in duration-300">
+
+                    {/* Unbound Phone Number Prompt Banner */}
+                    {isUnboundPhone(member.id) && (
+                      <div className="rounded-xl border border-amber-200/90 bg-amber-50/90 p-3.5 sm:p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="mt-0.5 p-1.5 rounded-full bg-amber-100 text-amber-800 shrink-0">
+                            <Smartphone className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[14px] font-bold text-amber-950 leading-snug">
+                              歡迎使用 LINE 登入！請補充您的手機號碼以方便現場核對預約
+                            </p>
+                            <p className="text-[12px] text-amber-800/80 mt-0.5">
+                              補充手機號碼後可保障您的預約權益與會員紀錄
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={openPhoneModal}
+                          className="shrink-0 px-3.5 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-[13px] font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap self-end sm:self-center"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          立即設定手機
+                        </button>
+                      </div>
+                    )}
                     
                     {/* Member Profile Dashboard Card */}
                     <div className={`bg-sage-50/70 p-4 sm:p-5 rounded-2xl border border-sage-100 flex-col md:flex-row justify-between gap-4 ${welcomeIsVenueRentMember && !welcomeIsPremiumMember ? 'flex' : 'hidden lg:flex'}`}>
-                      <div className="hidden lg:block space-y-3 flex-1">
-                        <p className="hidden lg:block text-stone-900 font-black text-lg sm:text-xl leading-tight">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
+                      <div className="hidden lg:block space-y-3 flex-1 min-w-0">
+                        <p className="hidden lg:block text-stone-900 font-black text-lg sm:text-xl leading-tight truncate">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
                         <div className="grid grid-cols-2 gap-2 text-[11px] sm:text-sm text-stone-600 font-semibold">
                           <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span className="shrink-0 text-stone-500">生日</span><span className="shrink-0 text-stone-300">|</span><span className="min-w-0 font-sans font-bold text-stone-800 text-[11px] sm:text-sm whitespace-nowrap">{member.birthday}</span>
@@ -2260,21 +2518,33 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                           <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span className="shrink-0 text-stone-500">星座</span><span className="shrink-0 text-stone-300">|</span><span className="min-w-0 font-bold text-stone-800 text-[11px] sm:text-sm whitespace-nowrap">{getZodiacSign(member.birthday)}</span>
                           </div>
-                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
-                            <span className="shrink-0 text-stone-500">電話</span><span className="shrink-0 text-stone-300">|</span><span className="min-w-0 font-sans font-bold text-stone-800 text-[11px] sm:text-sm whitespace-nowrap">{member.id}</span>
+                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 overflow-hidden">
+                            <span className="shrink-0 text-stone-500">電話</span><span className="shrink-0 text-stone-300">|</span>
+                            {isUnboundPhone(member.id) ? (
+                              <button
+                                type="button"
+                                onClick={openPhoneModal}
+                                className="min-w-0 text-[11px] sm:text-sm font-bold text-amber-700 hover:text-amber-800 underline decoration-amber-400 underline-offset-2 flex items-center gap-1 cursor-pointer truncate"
+                                title="點擊設定手機號碼"
+                              >
+                                <span className="truncate">未綁定（點擊設定）</span>
+                              </button>
+                            ) : (
+                              <span className="min-w-0 font-sans font-bold text-stone-800 text-[11px] sm:text-sm truncate">{member.id}</span>
+                            )}
                           </div>
-                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-visible">
+                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 overflow-visible">
                             <span className="shrink-0 text-stone-500">身分</span><span className="shrink-0 text-stone-300">|</span>{(() => {
                               const identityLabels = getMemberIdentityLabels(member);
                               const primaryIdentity = identityLabels[0] || member.level;
                               if (identityLabels.length <= 1) {
-                                return <span className="min-w-0 px-1.5 py-0.5 bg-sage-800 text-white rounded text-[9px] sm:text-[10px] font-bold whitespace-nowrap">{primaryIdentity}</span>;
+                                return <span className="min-w-0 px-1.5 py-0.5 bg-sage-800 text-white rounded text-[9px] sm:text-[10px] font-bold truncate">{primaryIdentity}</span>;
                               }
                               return (
-                                <details className="inline-block relative group">
-                                  <summary className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-sage-800 text-white rounded text-[9px] sm:text-[10px] font-bold whitespace-nowrap cursor-pointer list-none">
-                                    {primaryIdentity}
-                                    <ChevronDown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                <details className="inline-block relative min-w-0 group">
+                                  <summary className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-sage-800 text-white rounded text-[9px] sm:text-[10px] font-bold cursor-pointer list-none truncate">
+                                    <span className="truncate">{primaryIdentity}</span>
+                                    <ChevronDown className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
                                   </summary>
                                   <div className="absolute right-0 top-full z-30 mt-1 min-w-[92px] rounded-lg border border-sage-100 bg-white p-1.5 shadow-lg">
                                     {identityLabels.map(label => (
