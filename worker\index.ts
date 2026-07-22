@@ -209,7 +209,7 @@ async function patchDocument(env: Env, path: string, fields: Record<string, any>
   if (!response.ok) throw new Error(`Firestore PATCH ${path} failed: ${response.status} ${await response.text()}`);
 }
 
-type OAuthState = { state: string; nonce: string; verifier: string; returnTo: string; exp: number };
+type OAuthState = { state: string; nonce: string; returnTo: string; exp: number };
 type LoginSession = { memberId: string; lineUserId: string; exp: number };
 
 function requireLoginConfiguration(env: Env) {
@@ -225,11 +225,9 @@ async function startLineLogin(request: Request, env: Env) {
   }
   const state = randomBase64Url();
   const nonce = randomBase64Url();
-  const verifier = randomBase64Url(48);
   const oauthState: OAuthState = {
     state,
     nonce,
-    verifier,
     returnTo: safeReturnTo(url.searchParams.get('returnTo')),
     exp: Date.now() + 10 * 60 * 1000
   };
@@ -240,11 +238,9 @@ async function startLineLogin(request: Request, env: Env) {
     response_type: 'code',
     client_id: env.LINE_LOGIN_CHANNEL_ID!,
     redirect_uri: redirectUri,
-    state,
+    state: signedState,
     scope: 'openid profile',
     nonce,
-    code_challenge: await sha256Base64Url(verifier),
-    code_challenge_method: 'S256',
     bot_prompt: 'normal'
   }).toString();
   return new Response(null, {
@@ -256,7 +252,7 @@ async function startLineLogin(request: Request, env: Env) {
   });
 }
 
-async function exchangeLineLoginCode(request: Request, env: Env, code: string, verifier: string) {
+async function exchangeLineLoginCode(request: Request, env: Env, code: string) {
   const response = await fetch('https://api.line.me/oauth2/v2.1/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -265,8 +261,7 @@ async function exchangeLineLoginCode(request: Request, env: Env, code: string, v
       code,
       redirect_uri: `${appOrigin(request, env)}/api/auth/line/callback`,
       client_id: env.LINE_LOGIN_CHANNEL_ID!,
-      client_secret: env.LINE_LOGIN_CHANNEL_SECRET!,
-      code_verifier: verifier
+      client_secret: env.LINE_LOGIN_CHANNEL_SECRET!
     })
   });
   if (!response.ok) throw new Error(`LINE Login token exchange failed: ${response.status} ${await response.text()}`);
@@ -378,13 +373,17 @@ async function completeLineProfile(request: Request, env: Env) {
 async function finishLineLogin(request: Request, env: Env) {
   if (!requireLoginConfiguration(env)) return json({ error: 'LINE_LOGIN_NOT_CONFIGURED' }, 503);
   const url = new URL(request.url);
-  const stateCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
   const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state');
+  const returnedState = url.searchParams.get('state');
+  const stateFromParam = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, returnedState || undefined);
+  const stateFromCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
+  const oauthState = stateFromParam || (
+    stateFromCookie && stateFromCookie.state === returnedState ? stateFromCookie : null
+  );
   if (url.searchParams.get('error')) return json({ error: 'LINE_LOGIN_DENIED' }, 400);
-  if (!code || !stateCookie || stateCookie.exp < Date.now() || stateCookie.state !== state) return json({ error: 'INVALID_OR_EXPIRED_OAUTH_STATE' }, 400);
-  const tokens = await exchangeLineLoginCode(request, env, code, stateCookie.verifier);
-  const profile = await verifyLineIdToken(env, tokens.id_token, stateCookie.nonce);
+  if (!code || !oauthState || oauthState.exp < Date.now()) return json({ error: 'INVALID_OR_EXPIRED_OAUTH_STATE' }, 400);
+  const tokens = await exchangeLineLoginCode(request, env, code);
+  const profile = await verifyLineIdToken(env, tokens.id_token, oauthState.nonce);
   if (!/^U[0-9a-f]{32}$/i.test(profile.sub)) return json({ error: 'INVALID_LINE_USER_ID' }, 400);
   const member = await upsertLineMember(env, profile);
   const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
@@ -392,7 +391,7 @@ async function finishLineLogin(request: Request, env: Env) {
     lineUserId: profile.sub,
     exp: Date.now() + 30 * 24 * 60 * 60 * 1000
   } satisfies LoginSession);
-  const redirect = new URL(stateCookie.returnTo, appOrigin(request, env));
+  const redirect = new URL(oauthState.returnTo, appOrigin(request, env));
   redirect.searchParams.set('lineLogin', 'success');
   const headers = new Headers({ location: redirect.toString() });
   headers.append('set-cookie', cookie('zf_session', session, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000'));
