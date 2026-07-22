@@ -300,12 +300,78 @@ async function upsertLineMember(env: Env, profile: { sub: string; name?: string;
     lineUserId: profile.sub,
     linePictureUrl: profile.picture || existing?.linePictureUrl || '',
     lineEmail: profile.email || existing?.lineEmail || '',
+    isProfileCompleted: existing?.isProfileCompleted === true || (
+      /^09\d{8}$/.test(memberId) &&
+      typeof existing?.name === 'string' &&
+      /^[\u3400-\u4DBF\u4E00-\u9FFF]{1,4}$/u.test(existing.name) &&
+      typeof existing?.birthday === 'string' && existing.birthday.length > 0
+    ),
     createdAt: existing?.createdAt || now,
     lineLastLoginAt: now
   };
   await patchDocument(env, `members/${memberId}`, member);
   await patchDocument(env, identityPath, { memberId, lineUserId: profile.sub, updatedAt: now });
   return member;
+}
+
+async function completeLineProfile(request: Request, env: Env) {
+  if (!env.SESSION_SIGNING_SECRET) return json({ ok: false, error: 'LINE_LOGIN_NOT_CONFIGURED' }, 503);
+  const session = await verifySignedPayload<LoginSession>(env.SESSION_SIGNING_SECRET, getCookies(request).zf_session);
+  if (!session || session.exp < Date.now()) return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
+
+  const input = await request.json() as { name?: string; phone?: string; birthday?: string; gender?: string; lineId?: string };
+  const name = (input.name || '').trim();
+  const phone = (input.phone || '').replace(/\D/g, '');
+  const birthday = (input.birthday || '').trim();
+  if (!/^[\u3400-\u4DBF\u4E00-\u9FFF]{1,4}$/u.test(name)) {
+    return json({ ok: false, error: 'INVALID_NAME', message: '姓名限填 1 至 4 個中文字。' }, 400);
+  }
+  if (!/^09\d{8}$/.test(phone)) {
+    return json({ ok: false, error: 'INVALID_PHONE', message: '請輸入正確的台灣手機號碼（09 開頭，共 10 碼）。' }, 400);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+    return json({ ok: false, error: 'INVALID_BIRTHDAY', message: '請選擇生日。' }, 400);
+  }
+
+  const current = await getDocument(env, `members/${session.memberId}`);
+  if (!current || current.lineUserId !== session.lineUserId) return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
+  const phoneMember = await getDocument(env, `members/${phone}`);
+  if (phoneMember?.lineUserId && phoneMember.lineUserId !== session.lineUserId) {
+    return json({ ok: false, error: 'PHONE_ALREADY_LINKED', message: '此手機號碼已綁定其他 LINE 帳號，請聯絡店家協助。' }, 409);
+  }
+
+  const now = Date.now();
+  const member = {
+    ...current,
+    ...(phoneMember || {}),
+    id: phone,
+    name,
+    birthday,
+    gender: input.gender === '男' ? '男' : '女',
+    lineId: (input.lineId || '').trim(),
+    lineUserId: session.lineUserId,
+    isProfileCompleted: true,
+    createdAt: phoneMember?.createdAt || current.createdAt || now,
+    updatedAt: now
+  };
+  await patchDocument(env, `members/${phone}`, member);
+  await patchDocument(env, `lineIdentities/${session.lineUserId}`, {
+    memberId: phone,
+    lineUserId: session.lineUserId,
+    updatedAt: now
+  });
+
+  const renewedSession = await signPayload(env.SESSION_SIGNING_SECRET, {
+    memberId: phone,
+    lineUserId: session.lineUserId,
+    exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+  } satisfies LoginSession);
+  return new Response(JSON.stringify({ ok: true, member }), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'set-cookie': cookie('zf_session', renewedSession, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000')
+    }
+  });
 }
 
 async function finishLineLogin(request: Request, env: Env) {
@@ -529,6 +595,9 @@ export default {
       }
       if (request.method === 'GET' && url.pathname === '/api/auth/session') {
         return getLoginSession(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/auth/profile') {
+        return completeLineProfile(request, env);
       }
       if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
         return logoutLineSession();
