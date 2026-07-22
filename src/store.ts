@@ -21,6 +21,7 @@ export interface Member {
   id: string; // phone is used as ID
   name: string;
   registeredName?: string;
+  lineDisplayName?: string;
   birthday: string;
   gender: Gender;
   level: MemberLevel;
@@ -185,7 +186,14 @@ export const db = {
     const members = db.getMembers();
     const idx = members.findIndex(x => x.id === oldId);
     if (idx >= 0) {
-      const updatedMember: Member = { ...members[idx], name: name || members[idx].name, gender: gender || members[idx].gender, birthday: birthday || members[idx].birthday };
+      const updatedName = name || members[idx].name;
+      const updatedMember: Member = {
+        ...members[idx],
+        name: updatedName,
+        registeredName: members[idx].isProfileCompleted === true ? updatedName : members[idx].registeredName,
+        gender: gender || members[idx].gender,
+        birthday: birthday || members[idx].birthday
+      };
       if (lineId !== undefined) updatedMember.lineId = lineId;
       if (level !== undefined) updatedMember.level = level;
       if (memberLevel !== undefined) updatedMember.memberLevel = memberLevel;
