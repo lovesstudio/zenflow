@@ -265,6 +265,7 @@ type SessionMember = {
   roles: string[];
   lineUserId: string;
   createdAt: number;
+  isProfileCompleted?: boolean;
 };
 type LoginSession = { memberId: string; lineUserId: string; member?: SessionMember; exp: number };
 
@@ -354,26 +355,62 @@ async function verifyLineIdToken(env: Env, idToken: string, nonce: string) {
 async function upsertLineMember(env: Env, profile: { sub: string; name?: string; picture?: string; email?: string }) {
   const identityPath = `lineIdentities/${profile.sub}`;
   const identity = await getDocument(env, identityPath);
-  const memberId = typeof identity?.memberId === 'string' ? identity.memberId : `line_${profile.sub}`;
+  let memberId = typeof identity?.memberId === 'string' ? identity.memberId : `line_${profile.sub}`;
+
+  if (env.USER_KV) {
+    try {
+      const kvMember = await env.USER_KV.get<Partial<SessionMember>>(`line_user:${profile.sub}`, 'json');
+      if (kvMember && kvMember.id && /^09\d{8}$/.test(kvMember.id.trim())) {
+        memberId = kvMember.id.trim();
+      }
+    } catch (e) {}
+  }
+
   const existing = await getDocument(env, `members/${memberId}`);
   const now = Date.now();
-  const member = {
+
+  let name = existing?.name || profile.name || 'LINE 會員';
+  if (existing?.name && /^[\u4e00-\u9fa5]{2,4}$/.test(existing.name.trim())) {
+    name = existing.name.trim();
+  }
+
+  const isCompleted = Boolean(
+    existing?.isProfileCompleted ||
+    (memberId && /^09\d{8}$/.test(memberId.trim()) && name && /^[\u4e00-\u9fa5]{2,4}$/.test(name))
+  );
+
+  const member: SessionMember = {
     ...(existing || {}),
     id: memberId,
-    name: profile.name || existing?.name || 'LINE 會員',
+    name,
     birthday: existing?.birthday || '',
     gender: existing?.gender || '女',
     level: existing?.level || '一般',
     role: existing?.role || 'member',
     roles: Array.isArray(existing?.roles) ? existing.roles : ['member'],
     lineUserId: profile.sub,
-    linePictureUrl: profile.picture || existing?.linePictureUrl || '',
-    lineEmail: profile.email || existing?.lineEmail || '',
     createdAt: existing?.createdAt || now,
-    lineLastLoginAt: now
+    isProfileCompleted: isCompleted,
   };
-  await patchDocument(env, `members/${memberId}`, member);
-  await patchDocument(env, identityPath, { memberId, lineUserId: profile.sub, updatedAt: now });
+
+  try {
+    await patchDocument(env, `members/${memberId}`, {
+      ...member,
+      linePictureUrl: profile.picture || existing?.linePictureUrl || '',
+      lineEmail: profile.email || existing?.lineEmail || '',
+      lineLastLoginAt: now
+    });
+    await patchDocument(env, identityPath, { memberId, lineUserId: profile.sub, updatedAt: now });
+  } catch (fsErr) {
+    console.warn('Firestore sync skipped or failed in upsertLineMember:', fsErr);
+  }
+
+  if (env.USER_KV) {
+    try {
+      await env.USER_KV.put(`line_user:${profile.sub}`, JSON.stringify(member));
+    } catch (e) {}
+  }
+
   return member;
 }
 
@@ -551,16 +588,21 @@ async function saveUserProfile(request: Request, env: Env) {
   const name = body.name?.trim() || '';
   const phone = body.phone?.trim() || '';
 
-  if (!name) return json({ ok: false, error: 'NAME_REQUIRED' }, 400);
+  if (!name || !/^[\u4e00-\u9fa5]{2,4}$/.test(name)) return json({ ok: false, error: 'INVALID_NAME_FORMAT' }, 400);
   if (!/^09\d{8}$/.test(phone)) return json({ ok: false, error: 'INVALID_PHONE_FORMAT' }, 400);
 
   const updatedMember: SessionMember = {
     ...session.member,
     id: phone,
     name,
-    birthday: body.birthday || session.member.birthday || '',
-    gender: body.gender || session.member.gender || '女',
-    lineUserId: session.lineUserId
+    birthday: body.birthday || session.member?.birthday || '',
+    gender: body.gender || session.member?.gender || '女',
+    level: session.member?.level || '一般',
+    role: session.member?.role || 'member',
+    roles: session.member?.roles || ['member'],
+    createdAt: session.member?.createdAt || Date.now(),
+    lineUserId: session.lineUserId,
+    isProfileCompleted: true
   };
 
   if (env.USER_KV) {
@@ -571,6 +613,21 @@ async function saveUserProfile(request: Request, env: Env) {
     } catch (kvErr) {
       console.error('Failed to save user profile to USER_KV:', kvErr);
     }
+  }
+
+  try {
+    const identityPath = `lineIdentities/${session.lineUserId}`;
+    await patchDocument(env, identityPath, { memberId: phone, lineUserId: session.lineUserId, updatedAt: Date.now() });
+    await patchDocument(env, `members/${phone}`, {
+      ...updatedMember,
+      id: phone,
+      name,
+      lineUserId: session.lineUserId,
+      isProfileCompleted: true,
+      updatedAt: Date.now()
+    });
+  } catch (fsErr) {
+    console.warn('Firestore profile sync failed or skipped in saveUserProfile:', fsErr);
   }
 
   const newSessionToken = await signPayload(env.SESSION_SIGNING_SECRET, {
