@@ -1391,7 +1391,7 @@ export default function Backend() {
                 <ChevronDown className={`w-4 h-4 opacity-80 transition-transform ${isTherapistNavOpen ? 'rotate-180' : ''}`} />
               </button>
               {isTherapistNavOpen && (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[224px] max-w-[calc(100vw-28px)] overflow-hidden rounded-2xl border border-sage-100 bg-sage-50 shadow-2xl shadow-black/20">
+                <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[260px] max-w-[calc(100vw-28px)] overflow-hidden rounded-2xl border border-sage-100 bg-sage-50 shadow-2xl shadow-black/20 md:w-[380px]">
                   {(() => {
                     const groups = [
                       { id: 'maleMassage' as const, label: '男按摩師', names: portalMaleTherapists, suffix: '老師' },
@@ -1401,21 +1401,21 @@ export default function Backend() {
                     ];
                     const activeGroup = groups.find(group => group.id === therapistNavCategory) || groups[0];
                     return (
-                      <div className="grid grid-cols-[82px_minmax(0,1fr)] min-h-[166px]">
+                      <div className="grid min-h-[166px] grid-cols-[96px_minmax(0,1fr)] md:min-h-[210px] md:grid-cols-[132px_minmax(0,1fr)]">
                         <div className="bg-sage-100/70 border-r border-sage-200">
                           {groups.map(group => (
                             <button
                               key={group.id}
                               type="button"
                               onClick={() => setTherapistNavCategory(group.id)}
-                              className={`w-full px-1 py-2.5 text-center text-[10.5px] font-black tracking-normal transition whitespace-nowrap ${therapistNavCategory === group.id ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white/80'} ${group.id !== 'maleMassage' ? 'border-t border-sage-200/70' : ''}`}
+                              className={`w-full px-1.5 py-3 text-center text-[11px] font-black tracking-normal transition whitespace-nowrap md:px-2 md:py-4 md:text-[15px] ${therapistNavCategory === group.id ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white/80'} ${group.id !== 'maleMassage' ? 'border-t border-sage-200/70' : ''}`}
                             >
                               {group.label}
                             </button>
                           ))}
                         </div>
                         <div className="bg-sage-50">
-                          <div className="px-1.5 py-2 text-[9.5px] font-black tracking-normal text-sage-700 border-b border-sage-100 text-center whitespace-nowrap">
+                          <div className="px-1.5 py-2 text-[9.5px] font-black tracking-normal text-sage-700 border-b border-sage-100 text-center whitespace-nowrap md:px-3 md:py-3 md:text-[13px]">
                             {activeGroup.label}名單
                           </div>
                           <div className="max-h-[220px] overflow-y-auto">
@@ -1428,7 +1428,7 @@ export default function Backend() {
                                   setTab('therapist');
                                   setIsTherapistNavOpen(false);
                                 }}
-                                className={`w-full px-1.5 py-2.5 text-center text-[11px] font-black tracking-normal transition border-b border-sage-100 last:border-b-0 whitespace-nowrap ${selectedTherapistPortal === name ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white'}`}
+                                className={`w-full px-2 py-3 text-center text-[12px] font-black tracking-normal transition border-b border-sage-100 last:border-b-0 whitespace-nowrap md:px-3 md:py-4 md:text-[15px] ${selectedTherapistPortal === name ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white'}`}
                               >
                                 {name}{activeGroup.suffix}
                               </button>
@@ -2865,10 +2865,10 @@ export default function Backend() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 md:gap-4">
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">開始日期
-                      <input type="date" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
+                      <input type="date" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="h-10 w-full min-w-0 max-w-full rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[11px] font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-xs md:text-sm" />
                     </label>
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">結束日期
-                      <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
+                      <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-10 w-full min-w-0 max-w-full rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[11px] font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-xs md:text-sm" />
                     </label>
                   </div>
                   <div className="flex justify-end">
