@@ -26,6 +26,7 @@ export interface Member {
   memberLevel?: '一般' | '金卡' | '黑卡';
   lineId?: string;
   lineUserId?: string;
+  isProfileCompleted?: boolean;
   note?: string;
   referredBy?: string;
   referredMonth?: string;
