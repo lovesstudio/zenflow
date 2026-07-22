@@ -435,9 +435,10 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
 
   const isProfileIncomplete = (m?: Member | null) => {
     if (!m) return false;
-    const hasBoundPhone = m.id && /^09\d{8}$/.test(m.id.trim());
-    const hasValidName = m.name && m.name.trim() !== '' && !m.name.startsWith('LINE用戶') && !m.name.startsWith('line_');
-    return !hasBoundPhone || !hasValidName;
+    if (m.isProfileCompleted) return false;
+    const hasBoundPhone = !!(m.id && /^09\d{8}$/.test(m.id.trim()));
+    const hasValidName = !!(m.name && /^[\u4e00-\u9fa5]{2,4}$/.test(m.name.trim()));
+    return !(hasBoundPhone && hasValidName);
   };
 
   const handleSaveProfileCompletion = async (e: React.FormEvent) => {
@@ -447,13 +448,13 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     const trimmedName = profileNameInput.trim();
     const trimmedPhone = profilePhoneInput.trim();
 
-    if (!trimmedName) {
-      setProfileError('請輸入您的真實姓名');
+    if (!trimmedName || !/^[\u4e00-\u9fa5]{2,4}$/.test(trimmedName)) {
+      setProfileError('請輸入 2-4 字中文姓名');
       return;
     }
 
     if (!/^09\d{8}$/.test(trimmedPhone)) {
-      setProfileError('請輸入正確的 10 碼手機號碼（例：0912345678）');
+      setProfileError('請輸入正確的手機號碼 (09開頭10碼數字)');
       return;
     }
 
@@ -464,7 +465,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         await fetch('/api/user/profile', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ name: trimmedName, phone: trimmedPhone })
+          body: JSON.stringify({ name: trimmedName, phone: trimmedPhone, isProfileCompleted: true })
         });
       } catch (apiErr) {
         console.warn('KV API sync skipped or failed', apiErr);
@@ -482,6 +483,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         nextMember = {
           ...existingMember,
           name: trimmedName,
+          isProfileCompleted: true,
           lineUserId: member.lineUserId || existingMember.lineUserId,
           lineId: member.lineId || existingMember.lineId,
         };
@@ -491,6 +493,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
           ...member,
           id: newPhone,
           name: trimmedName,
+          isProfileCompleted: true,
         };
 
         db.updateMemberInfo(
@@ -722,11 +725,14 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     if (member && step === 2) {
       if (isProfileIncomplete(member)) {
         setShowProfileModal(true);
-        setProfileNameInput(
-          member.name && !member.name.startsWith('LINE用戶') && !member.name.startsWith('line_')
-            ? member.name
-            : ''
-        );
+        let defaultName = '';
+        if (member.name && !member.name.startsWith('LINE用戶') && !member.name.startsWith('line_')) {
+          const cleaned = member.name.replace(/[^\u4e00-\u9fa5]/g, '');
+          if (cleaned.length >= 2 && cleaned.length <= 4) {
+            defaultName = cleaned;
+          }
+        }
+        setProfileNameInput(defaultName);
         setProfilePhoneInput(
           member.id && /^09\d{8}$/.test(member.id.trim()) ? member.id.trim() : ''
         );
@@ -2032,8 +2038,8 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
 
       {showProfileModal && member && (
         <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-stone-100 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="bg-sage-900 px-6 py-6 text-white text-center">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border-0 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="bg-sage-900 px-6 py-6 text-white text-center border-0">
               <div className="mx-auto w-12 h-12 rounded-full bg-sage-800/80 flex items-center justify-center mb-3 shadow-inner">
                 <User className="w-6 h-6 text-sage-200" />
               </div>
@@ -2043,7 +2049,9 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
 
             <form onSubmit={handleSaveProfileCompletion} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1.5">您的真實姓名 <span className="text-rose-500">*</span></label>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                  您的真實姓名 (繁體中文 2-4 字) <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={profileNameInput}
@@ -2051,14 +2059,25 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                     setProfileNameInput(e.target.value);
                     setProfileError('');
                   }}
-                  placeholder="請輸入姓名 (例如：王小明)"
-                  className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-bold text-stone-900 focus:bg-white focus:border-sage-500 focus:outline-none focus:ring-1 focus:ring-sage-500 transition"
+                  placeholder="請輸入中文姓名 (例如：王小明)"
+                  className={`w-full rounded-xl border bg-stone-50 px-4 py-3 text-sm font-bold text-stone-900 focus:bg-white focus:outline-none focus:ring-1 transition ${
+                    profileNameInput.trim() !== '' && !/^[\u4e00-\u9fa5]{2,4}$/.test(profileNameInput.trim())
+                      ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                      : 'border-stone-200 focus:border-sage-500 focus:ring-sage-500'
+                  }`}
                   autoFocus
                 />
+                {profileNameInput.trim() !== '' && !/^[\u4e00-\u9fa5]{2,4}$/.test(profileNameInput.trim()) && (
+                  <p className="mt-1.5 text-xs font-bold text-rose-600 flex items-center gap-1">
+                    <span>⚠️</span> 請輸入 2-4 字中文姓名
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1.5">手機號碼 (10 碼) <span className="text-rose-500">*</span></label>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                  手機號碼 (09開頭10碼數字) <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="tel"
                   value={profilePhoneInput}
@@ -2068,8 +2087,17 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                   }}
                   maxLength={10}
                   placeholder="請輸入 10 碼手機號碼 (例如：0912345678)"
-                  className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-bold text-stone-900 focus:bg-white focus:border-sage-500 focus:outline-none focus:ring-1 focus:ring-sage-500 transition font-sans"
+                  className={`w-full rounded-xl border bg-stone-50 px-4 py-3 text-sm font-bold text-stone-900 focus:bg-white focus:outline-none focus:ring-1 transition font-sans ${
+                    profilePhoneInput.trim() !== '' && !/^09\d{8}$/.test(profilePhoneInput.trim())
+                      ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                      : 'border-stone-200 focus:border-sage-500 focus:ring-sage-500'
+                  }`}
                 />
+                {profilePhoneInput.trim() !== '' && !/^09\d{8}$/.test(profilePhoneInput.trim()) && (
+                  <p className="mt-1.5 text-xs font-bold text-rose-600 flex items-center gap-1">
+                    <span>⚠️</span> 請輸入正確的手機號碼 (09開頭10碼數字)
+                  </p>
+                )}
               </div>
 
               {profileError && (
