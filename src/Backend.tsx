@@ -2865,10 +2865,10 @@ export default function Backend() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 md:gap-4">
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">開始日期
-                      <input type="date" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="h-10 w-[88%] min-w-0 max-w-[132px] rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[10px] font-bold outline-none focus:border-sage-500 sm:text-[11px] md:max-w-[145px] md:px-2 md:text-xs" />
+                      <input type="date" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="h-11 w-full min-w-0 max-w-full rounded-xl border border-stone-200 bg-stone-50 px-2 text-xs font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-[13px] md:text-sm" />
                     </label>
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">結束日期
-                      <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-10 w-[88%] min-w-0 max-w-[132px] rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[10px] font-bold outline-none focus:border-sage-500 sm:text-[11px] md:max-w-[145px] md:px-2 md:text-xs" />
+                      <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-11 w-full min-w-0 max-w-full rounded-xl border border-stone-200 bg-stone-50 px-2 text-xs font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-[13px] md:text-sm" />
                     </label>
                   </div>
                   <div className="flex justify-end">
