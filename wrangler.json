@@ -9,12 +9,6 @@
     "FIREBASE_PROJECT_ID": "project-09054e85-fe75-4f73-a3d",
     "FIREBASE_DATABASE_ID": "ai-studio-ab68fdae-75a1-4c4e-b55e-fc65b5115e63"
   },
-  "kv_namespaces": [
-    {
-      "binding": "USER_KV",
-      "id": "zenflow_user_kv"
-    }
-  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
