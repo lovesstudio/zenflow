@@ -1408,17 +1408,17 @@ export default function Backend() {
                               key={group.id}
                               type="button"
                               onClick={() => setTherapistNavCategory(group.id)}
-                              className={`w-full px-1.5 py-3 text-center text-[11px] font-black tracking-normal transition whitespace-nowrap md:px-2 md:py-4 md:text-[15px] ${therapistNavCategory === group.id ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white/80'} ${group.id !== 'maleMassage' ? 'border-t border-sage-200/70' : ''}`}
+                              className={`w-full px-1.5 py-3 text-center text-[11px] font-black tracking-normal transition whitespace-nowrap md:px-2 md:py-3.5 md:text-[13px] ${therapistNavCategory === group.id ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white/80'} ${group.id !== 'maleMassage' ? 'border-t border-sage-200/70' : ''}`}
                             >
                               {group.label}
                             </button>
                           ))}
                         </div>
                         <div className="bg-sage-50">
-                          <div className="px-1.5 py-2 text-[9.5px] font-black tracking-normal text-sage-700 border-b border-sage-100 text-center whitespace-nowrap md:px-3 md:py-3 md:text-[13px]">
+                          <div className="px-1.5 py-2 text-[9.5px] font-black tracking-normal text-sage-700 border-b border-sage-100 text-center whitespace-nowrap md:px-3 md:py-2.5 md:text-[11px]">
                             {activeGroup.label}名單
                           </div>
-                          <div className="max-h-[220px] overflow-y-auto">
+                          <div>
                             {activeGroup.names.map(name => (
                               <button
                                 key={`${activeGroup.id}-${name}`}
@@ -1428,7 +1428,7 @@ export default function Backend() {
                                   setTab('therapist');
                                   setIsTherapistNavOpen(false);
                                 }}
-                                className={`w-full px-2 py-3 text-center text-[12px] font-black tracking-normal transition border-b border-sage-100 last:border-b-0 whitespace-nowrap md:px-3 md:py-4 md:text-[15px] ${selectedTherapistPortal === name ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white'}`}
+                                className={`w-full px-2 py-3 text-center text-[12px] font-black tracking-normal transition border-b border-sage-100 last:border-b-0 whitespace-nowrap md:px-3 md:py-3.5 md:text-[13px] ${selectedTherapistPortal === name ? 'bg-sage-500 text-white' : 'text-sage-900 hover:bg-white'}`}
                               >
                                 {name}{activeGroup.suffix}
                               </button>
@@ -2835,9 +2835,9 @@ export default function Backend() {
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">優惠代碼
                       <input value={promotionForm.code} onChange={e => setPromotionForm({...promotionForm, code: e.target.value.toUpperCase().replace(/\s/g, '')})} placeholder="例如 ZEN300" className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-black uppercase tracking-wide outline-none focus:border-sage-500" />
                     </label>
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">可用次數
+                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">
+                      <span className="flex items-center justify-between gap-1"><span>可用次數</span><span className="whitespace-nowrap text-[10px] font-bold text-stone-400 md:text-xs">0代表無限次</span></span>
                       <input type="number" min="0" value={promotionForm.memberUsageLimit} onChange={e => setPromotionForm({...promotionForm, memberUsageLimit: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
-                      <span className="block text-xs font-bold text-stone-400">填寫 0 代表不限制次數。</span>
                     </label>
                   </div>
                   <label className="block space-y-1.5 text-sm font-black text-stone-700">活動名稱
@@ -2851,7 +2851,7 @@ export default function Backend() {
                     </label>
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">適用預約
                       <select value={promotionForm.appliesTo} onChange={e => setPromotionForm({...promotionForm, appliesTo: e.target.value as 'all' | 'massage' | 'fitness'})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500">
-                        <option value="all">按摩與健身皆適用</option><option value="massage">僅限按摩預約</option><option value="fitness">僅限健身預約</option>
+                        <option value="all">按摩健身皆可</option><option value="massage">僅限按摩預約</option><option value="fitness">僅限健身預約</option>
                       </select>
                     </label>
                   </div>
@@ -2865,10 +2865,10 @@ export default function Backend() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 md:gap-4">
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">開始日期
-                      <input type="date" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="h-10 w-full min-w-0 max-w-full rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[11px] font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-xs md:text-sm" />
+                      <input type="date" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="h-10 w-[88%] min-w-0 max-w-[132px] rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[10px] font-bold outline-none focus:border-sage-500 sm:text-[11px] md:max-w-[145px] md:px-2 md:text-xs" />
                     </label>
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">結束日期
-                      <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-10 w-full min-w-0 max-w-full rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[11px] font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-xs md:text-sm" />
+                      <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-10 w-[88%] min-w-0 max-w-[132px] rounded-lg border border-stone-200 bg-stone-50 px-1.5 text-[10px] font-bold outline-none focus:border-sage-500 sm:text-[11px] md:max-w-[145px] md:px-2 md:text-xs" />
                     </label>
                   </div>
                   <div className="flex justify-end">
