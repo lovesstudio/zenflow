@@ -20,6 +20,7 @@ export interface TherapistAvailability {
 export interface Member {
   id: string; // phone is used as ID
   name: string;
+  registeredName?: string;
   birthday: string;
   gender: Gender;
   level: MemberLevel;
