@@ -294,7 +294,14 @@ async function upsertLineMember(env: Env, profile: { sub: string; name?: string;
   const member = {
     ...(existing || {}),
     id: memberId,
-    name: profile.name || existing?.name || 'LINE 會員',
+    name: existing?.registeredName || existing?.name || profile.name || 'LINE 會員',
+    registeredName: existing?.registeredName || (
+      existing?.isProfileCompleted === true &&
+      typeof existing?.name === 'string' &&
+      /^[\u3400-\u4DBF\u4E00-\u9FFF]{1,4}$/u.test(existing.name)
+        ? existing.name
+        : ''
+    ),
     birthday: existing?.birthday || '',
     gender: existing?.gender || '女',
     level: existing?.level || '一般',
@@ -349,6 +356,7 @@ async function completeLineProfile(request: Request, env: Env) {
     ...(phoneMember || {}),
     id: phone,
     name,
+    registeredName: name,
     birthday,
     gender: input.gender === '男' ? '男' : '女',
     lineId: (input.lineId || '').trim(),
