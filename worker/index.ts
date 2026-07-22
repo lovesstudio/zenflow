@@ -302,6 +302,7 @@ async function upsertLineMember(env: Env, profile: { sub: string; name?: string;
         ? existing.name
         : ''
     ),
+    lineDisplayName: profile.name || existing?.lineDisplayName || '',
     birthday: existing?.birthday || '',
     gender: existing?.gender || '女',
     level: existing?.level || '一般',
