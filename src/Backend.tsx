@@ -2911,11 +2911,11 @@ export default function Backend() {
                         <span className="shrink-0 rounded-md bg-sage-800 px-2.5 py-1 font-black tracking-wide text-white">{promotion.code}</span>
                         <h4 className="min-w-0 truncate text-lg font-black text-stone-900">{promotion.name}</h4>
                       </div>
-                      <div className="mt-3 flex items-center justify-between gap-3">
-                        <span className={`rounded-md border px-2 py-1 text-sm font-black ${statusClass}`}>{statusLabel}</span>
+                      <div className="mt-3 flex items-center justify-start gap-1.5">
+                        <span className={`inline-flex h-10 min-h-10 items-center rounded-lg border px-3 text-sm font-black ${statusClass}`}>{statusLabel}</span>
                         <div className="flex shrink-0 gap-1.5">
-                          <button type="button" onClick={() => editPromotion(promotion)} className="rounded-lg border border-sage-100 bg-sage-50 px-3 py-2 text-sm font-black text-sage-800">編輯</button>
-                          <button type="button" onClick={() => { if (window.confirm(`確定刪除「${promotion.name}」嗎？`)) { db.deletePromotion(promotion.id); setPromotions(db.getPromotions()); if (editingPromotionId === promotion.id) resetPromotionForm(); } }} className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700">刪除</button>
+                          <button type="button" onClick={() => editPromotion(promotion)} className="h-10 min-h-10 rounded-lg border border-sage-100 bg-sage-50 px-3 text-sm font-black text-sage-800">編輯</button>
+                          <button type="button" onClick={() => { if (window.confirm(`確定刪除「${promotion.name}」嗎？`)) { db.deletePromotion(promotion.id); setPromotions(db.getPromotions()); if (editingPromotionId === promotion.id) resetPromotionForm(); } }} className="h-10 min-h-10 rounded-lg border border-rose-100 bg-rose-50 px-3 text-sm font-black text-rose-700">刪除</button>
                         </div>
                       </div>
                       <div className="mt-4 grid grid-cols-[minmax(0,1.45fr)_minmax(90px,0.75fr)] gap-x-5 gap-y-3 border-t border-stone-100 pt-4 text-sm md:gap-x-8">
@@ -4173,9 +4173,9 @@ export default function Backend() {
 
   {tab === 'therapist' && (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex min-h-8 items-center">
+      <div className="flex min-h-7 items-center">
         <div className="min-w-0 w-full">
-          <h2 className={`${!isAdmin ? 'text-[22px] md:text-3xl leading-8 md:leading-10 font-black text-stone-900 tracking-normal' : 'backend-page-title'}`}>
+          <h2 className={`${!isAdmin ? 'text-[22px] md:text-3xl leading-8 md:leading-10 font-black text-stone-900 tracking-normal' : 'text-xl font-black leading-7 text-stone-900'}`}>
             {selectedTherapistPortal
               ? (isAdmin ? getStaffPortalTitle(selectedTherapistPortal) : `${selectedTherapistPortal}${getStaffPortalRoleTitle(selectedTherapistPortal)}，${getTimeGreeting()}您好~`)
               : (isAdmin ? '師傅專區' : '我的頁面')}
@@ -4271,10 +4271,10 @@ export default function Backend() {
                     className="bg-white px-4 py-4 md:px-6 md:py-5 rounded-2xl shadow-sm border border-sage-100 flex items-center justify-between gap-3 hover:shadow-md transition relative overflow-hidden cursor-pointer group"
                   >
                     <div className="min-w-0">
-                      <p className="text-[16px] md:text-xl font-black text-stone-900 tracking-normal leading-tight">
+                      <p className="text-[18px] md:text-[22px] font-black text-stone-900 tracking-normal leading-tight">
                         本月收入一覽表
                       </p>
-                      <p className="text-[11px] md:text-xs text-stone-400 font-bold mt-1">
+                      <p className="text-[13px] md:text-sm text-stone-400 font-bold mt-1.5">
                         {showPortalStats ? '點擊收起收入明細' : '點擊展開收入明細'}
                       </p>
                     </div>
