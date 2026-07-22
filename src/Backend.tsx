@@ -2865,10 +2865,22 @@ export default function Backend() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 md:gap-4">
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">開始日期
-                      <input type="date" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="h-11 w-full min-w-0 max-w-full rounded-xl border border-stone-200 bg-stone-50 px-2 text-xs font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-[13px] md:text-sm" />
+                      <span className="relative flex h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-3 focus-within:border-sage-500">
+                        <span className="truncate text-[14px] font-black text-stone-700 sm:text-[15px] md:text-base">
+                          {promotionForm.startDate ? promotionForm.startDate.replace(/-/g, '/') : '年/月/日'}
+                        </span>
+                        <Calendar className="h-4 w-4 shrink-0 text-stone-400" />
+                        <input type="date" aria-label="開始日期" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+                      </span>
                     </label>
                     <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">結束日期
-                      <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-11 w-full min-w-0 max-w-full rounded-xl border border-stone-200 bg-stone-50 px-2 text-xs font-bold outline-none focus:border-sage-500 sm:px-2.5 sm:text-[13px] md:text-sm" />
+                      <span className="relative flex h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-3 focus-within:border-sage-500">
+                        <span className="truncate text-[14px] font-black text-stone-700 sm:text-[15px] md:text-base">
+                          {promotionForm.endDate ? promotionForm.endDate.replace(/-/g, '/') : '年/月/日'}
+                        </span>
+                        <Calendar className="h-4 w-4 shrink-0 text-stone-400" />
+                        <input type="date" aria-label="結束日期" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+                      </span>
                     </label>
                   </div>
                   <div className="flex justify-end">
