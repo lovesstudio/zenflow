@@ -2,8 +2,16 @@ interface Fetcher {
   fetch(request: Request): Promise<Response>;
 }
 
+interface KVNamespace {
+  get(key: string, type?: 'text'): Promise<string | null>;
+  get<T>(key: string, type: 'json'): Promise<T | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 interface Env {
   ASSETS: Fetcher;
+  USER_KV?: KVNamespace;
   LINE_CHANNEL_ACCESS_TOKEN: string;
   LINE_CHANNEL_SECRET: string;
   INTERNAL_WEBHOOK_SECRET: string;
@@ -463,6 +471,17 @@ async function finishLineLogin(request: Request, env: Env) {
       }
     }
 
+    if (env.USER_KV && profile.sub) {
+      try {
+        const kvMember = await env.USER_KV.get<Partial<SessionMember>>(`line_user:${profile.sub}`, 'json');
+        if (kvMember && typeof kvMember === 'object' && kvMember.id) {
+          member = { ...member, ...kvMember };
+        }
+      } catch (kvErr) {
+        console.warn('USER_KV lookup failed in finishLineLogin', kvErr);
+      }
+    }
+
     stage = 'session_creation';
     const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
       memberId: member.id,
@@ -502,24 +521,71 @@ async function getLoginSession(request: Request, env: Env) {
   if (!env.SESSION_SIGNING_SECRET) return json({ authenticated: false });
   const session = await verifySignedPayload<LoginSession>(env.SESSION_SIGNING_SECRET, getCookies(request).zf_session);
   if (!session || session.exp < Date.now()) return json({ authenticated: false });
-  const missingFirebaseBindings = missingBindings(env, [
-    'FIREBASE_PROJECT_ID',
-    'FIREBASE_CLIENT_EMAIL',
-    'FIREBASE_PRIVATE_KEY'
-  ]);
-  if (!missingFirebaseBindings.length) {
+  
+  if (session.member?.lineUserId !== session.lineUserId) return json({ authenticated: false });
+
+  let currentMember = session.member;
+
+  if (env.USER_KV && session.lineUserId) {
     try {
-      const member = await getDocument(env, `members/${session.memberId}`);
-      if (member?.lineUserId === session.lineUserId) return json({ authenticated: true, member, persistence: 'firebase' });
-    } catch (error) {
-      console.warn('Firebase session lookup failed; using signed session fallback', {
-        memberId: session.memberId,
-        error: safeErrorMessage(error)
-      });
+      const kvMember = await env.USER_KV.get<Partial<SessionMember>>(`line_user:${session.lineUserId}`, 'json');
+      if (kvMember && typeof kvMember === 'object' && kvMember.id) {
+        currentMember = { ...currentMember, ...kvMember };
+      }
+    } catch (kvErr) {
+      console.warn('USER_KV lookup failed in getLoginSession', kvErr);
     }
   }
-  if (session.member?.lineUserId !== session.lineUserId) return json({ authenticated: false });
-  return json({ authenticated: true, member: session.member, persistence: 'session' });
+
+  return json({ authenticated: true, member: currentMember, persistence: 'kv_session' });
+}
+
+async function saveUserProfile(request: Request, env: Env) {
+  if (!env.SESSION_SIGNING_SECRET) return json({ ok: false, error: 'NO_SESSION_SECRET' }, 500);
+  const session = await verifySignedPayload<LoginSession>(env.SESSION_SIGNING_SECRET, getCookies(request).zf_session);
+  if (!session || session.exp < Date.now() || !session.lineUserId) {
+    return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
+  }
+
+  const body = await request.json() as { name?: string; phone?: string; birthday?: string; gender?: string };
+  const name = body.name?.trim() || '';
+  const phone = body.phone?.trim() || '';
+
+  if (!name) return json({ ok: false, error: 'NAME_REQUIRED' }, 400);
+  if (!/^09\d{8}$/.test(phone)) return json({ ok: false, error: 'INVALID_PHONE_FORMAT' }, 400);
+
+  const updatedMember: SessionMember = {
+    ...session.member,
+    id: phone,
+    name,
+    birthday: body.birthday || session.member.birthday || '',
+    gender: body.gender || session.member.gender || '女',
+    lineUserId: session.lineUserId
+  };
+
+  if (env.USER_KV) {
+    try {
+      const payloadStr = JSON.stringify(updatedMember);
+      await env.USER_KV.put(`line_user:${session.lineUserId}`, payloadStr);
+      await env.USER_KV.put(`phone:${phone}`, payloadStr);
+    } catch (kvErr) {
+      console.error('Failed to save user profile to USER_KV:', kvErr);
+    }
+  }
+
+  const newSessionToken = await signPayload(env.SESSION_SIGNING_SECRET, {
+    ...session,
+    memberId: phone,
+    member: updatedMember
+  } satisfies LoginSession);
+
+  return new Response(JSON.stringify({ ok: true, member: updatedMember }), {
+    status: 200,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'set-cookie': cookie('zf_session', newSessionToken, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000')
+    }
+  });
 }
 
 function logoutLineSession() {
@@ -706,6 +772,9 @@ export default {
       }
       if (request.method === 'GET' && url.pathname === '/api/auth/session') {
         return getLoginSession(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/user/profile') {
+        return saveUserProfile(request, env);
       }
       if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
         return logoutLineSession();
