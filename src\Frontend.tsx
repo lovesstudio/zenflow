@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+// EZ Pages release: 2026-07-22-line-profile-fix-v2
 import { db, COURSES, Member, OrderItem, Order, calculateDiscount, ALL_TIME_SLOTS, isSlotAvailable, isDayAvailable, Gender, TherapistPreference, timeToMins, minsToTime, getDiscountStatus, sortOrderItems, TherapistAvailability, getSlotStatus, SlotStatus, isTimeRangeCovered, getDetailedSlotStatus, Promotion } from './store';
 import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X, ChevronLeft, ChevronDown, LogOut, ShieldAlert, Award, Star, Compass, MapPin } from 'lucide-react';
 
