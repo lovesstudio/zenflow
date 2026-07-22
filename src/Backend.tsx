@@ -2832,40 +2832,40 @@ export default function Backend() {
                 </div>
                 <div className="space-y-4">
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">
                       <span className="flex items-center">優惠代碼</span>
                       <input value={promotionForm.code} onChange={e => setPromotionForm({...promotionForm, code: e.target.value.toUpperCase().replace(/\s/g, '')})} placeholder="例如 ZEN300" className="block h-11 w-full min-w-0 box-border rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-black uppercase tracking-wide outline-none focus:border-sage-500" />
                     </label>
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">
                       <span className="flex items-center justify-between gap-1"><span>可用次數</span><span className="whitespace-nowrap text-[10px] font-bold text-stone-400 md:text-xs">0代表無限次</span></span>
                       <input type="number" min="0" value={promotionForm.memberUsageLimit} onChange={e => setPromotionForm({...promotionForm, memberUsageLimit: e.target.value})} className="block h-11 w-full min-w-0 box-border rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
                   </div>
-                  <label className="flex flex-col gap-2.5 text-sm font-black text-stone-700">活動名稱
+                  <label className="flex flex-col gap-2 text-sm font-black text-stone-700">活動名稱
                     <input value={promotionForm.name} onChange={e => setPromotionForm({...promotionForm, name: e.target.value})} placeholder="例如 十週年感謝優惠" className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                   </label>
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">折扣方式
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">折扣方式
                       <select value={promotionForm.discountType} onChange={e => setPromotionForm({...promotionForm, discountType: e.target.value as 'fixed' | 'percentage'})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500">
                         <option value="fixed">固定金額折抵</option><option value="percentage">百分比折扣</option>
                       </select>
                     </label>
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">適用預約
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">適用預約
                       <select value={promotionForm.appliesTo} onChange={e => setPromotionForm({...promotionForm, appliesTo: e.target.value as 'all' | 'massage' | 'fitness'})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500">
                         <option value="all">按摩健身皆可</option><option value="massage">僅限按摩預約</option><option value="fitness">僅限健身預約</option>
                       </select>
                     </label>
                   </div>
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">{promotionForm.discountType === 'fixed' ? '折抵金額（元）' : '折扣比例（%）'}
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">{promotionForm.discountType === 'fixed' ? '折抵金額（元）' : '折扣比例（%）'}
                       <input type="number" min="0" max={promotionForm.discountType === 'percentage' ? 100 : undefined} value={promotionForm.discountValue} onChange={e => setPromotionForm({...promotionForm, discountValue: e.target.value})} placeholder={promotionForm.discountType === 'fixed' ? '300' : '10'} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">最低消費金額
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">最低消費金額
                       <input type="number" min="0" value={promotionForm.minimumSpend} onChange={e => setPromotionForm({...promotionForm, minimumSpend: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
                   </div>
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">開始日期
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">開始日期
                       <span className="relative flex h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-3 focus-within:border-sage-500">
                         <span className="truncate text-[14px] font-black text-stone-700 sm:text-[15px] md:text-base">
                           {promotionForm.startDate ? promotionForm.startDate.replace(/-/g, '/') : '年/月/日'}
@@ -2874,7 +2874,7 @@ export default function Backend() {
                         <input type="date" aria-label="開始日期" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
                       </span>
                     </label>
-                    <label className="flex min-w-0 flex-col gap-2.5 text-sm font-black text-stone-700">結束日期
+                    <label className="flex min-w-0 flex-col gap-2 text-sm font-black text-stone-700">結束日期
                       <span className="relative flex h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-3 focus-within:border-sage-500">
                         <span className="truncate text-[14px] font-black text-stone-700 sm:text-[15px] md:text-base">
                           {promotionForm.endDate ? promotionForm.endDate.replace(/-/g, '/') : '年/月/日'}
