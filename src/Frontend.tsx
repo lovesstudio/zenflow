@@ -255,6 +255,11 @@ const getFriendlyDisplayName = (name: string) => {
   const cleanName = stripGender(name);
   if (!cleanName || cleanName === '系統管理員' || cleanName === '管理員') return '管理員';
   if (/^[A-Za-z][A-Za-z\s.'-]*$/.test(cleanName)) return cleanName;
+  const chineseName = (cleanName.match(/[\u3400-\u4DBF\u4E00-\u9FFF]+/gu) || []).join('');
+  if (chineseName) {
+    const chineseChars = Array.from(chineseName);
+    return chineseChars.length >= 3 ? chineseChars.slice(1).join('') : chineseName;
+  }
   const chars = Array.from(cleanName);
   if (chars.length >= 3 && /^[\u4e00-\u9fff]+$/.test(cleanName)) return chars.slice(1).join('');
   return cleanName;
@@ -1679,21 +1684,25 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     : 'text-[13px] min-[375px]:text-[14px] sm:text-base';
 
   const renderLinePayCheckout = () => (
-    <div className="rounded-2xl border border-sage-200 bg-sage-50/50 p-4 sm:p-5 space-y-4">
+    <div className="space-y-3.5 sm:space-y-4">
       <button
         type="button"
         onClick={() => processPayment('LINE PAY')}
         disabled={isRegistering}
-        className="w-full rounded-xl bg-[#06C755] px-4 py-4 text-base sm:text-lg font-black text-white shadow-md transition hover:bg-[#05b34c] hover:shadow-lg disabled:cursor-wait disabled:opacity-60"
+        className="w-full rounded-xl bg-[#06C755] px-4 py-4.5 text-[17px] sm:text-lg font-black text-white shadow-md transition hover:bg-[#05b34c] hover:shadow-lg disabled:cursor-wait disabled:opacity-60"
       >
         {isRegistering ? '正在連接 LINE Pay…' : 'LINE Pay 安全付款'}
       </button>
-      <p className="-mt-1 px-1 text-[10.5px] sm:text-xs leading-relaxed text-stone-400">
-        安全提示：確認金額後，系統將安全跳轉至 LINE Pay 進行付款，完成後將自動返回 ZEN FLOW 預約頁面。
-      </p>
-      <div className="rounded-xl border border-sage-200/80 bg-white/80 px-3.5 py-3 sm:px-4 sm:py-3.5 text-xs sm:text-sm leading-relaxed text-stone-600 shadow-xs">
-        <div className="min-w-0">
-          <p className="font-black text-sage-900">
+      <div className="rounded-xl bg-sage-50 px-4 py-4 sm:px-5 sm:py-5 text-[14px] sm:text-[15px] leading-[1.75] text-stone-600">
+        <div className="flex items-start gap-2.5">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#06A848]" />
+          <div className="min-w-0">
+            <p className="text-[15px] sm:text-base font-black text-sage-950">LINE Pay 付款說明</p>
+            <p className="mt-1.5">確認金額後，系統會安全跳轉至 LINE Pay。付款完成後，將自動返回 ZEN FLOW 預約頁面。</p>
+          </div>
+        </div>
+        <div className="mt-3.5 border-t border-sage-200/70 pt-3.5 pl-0.5">
+          <p className="text-[15px] sm:text-base font-black text-sage-950">
             {frontendTab === 'booking'
               ? '線上預付好禮｜免費升級 15 分鐘療癒加值（價值 $300）'
               : items.some(item => item.courseId === 'f1')
@@ -1702,12 +1711,12 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
           </p>
           {frontendTab === 'booking' && (
             <>
-              <p className="mt-1.5">完成線上 LINE Pay 付款，即免費享有<strong className="font-black text-stone-700">【15 分鐘肩頸熱敷 / 香氛精油加強（二選一）】</strong>。免去現場找零與對帳，療癒結束後直接優雅離店，享受最無縫的 ZEN FLOW 放鬆之旅。</p>
-              <p className="mt-2 italic text-stone-500">最晚可於預約前 1 小時線上取消，保證全額秒退，請安心預訂。</p>
+              <p className="mt-2">完成線上付款，即免費享有<strong className="font-black text-stone-800">「15 分鐘肩頸熱敷」或「香氛精油加強」二選一</strong>。免去現場找零與對帳，療癒結束後即可輕鬆離店。</p>
+              <p className="mt-2.5 font-bold text-sage-800">最晚可於預約前 1 小時線上取消，款項將全額退還。</p>
             </>
           )}
           {frontendTab === 'fitness' && items.some(item => item.courseId === 'f1') && (
-            <p className="mt-1.5">線上完成 LINE Pay 付款，教練體驗課結束後，即可免費預約【15 分鐘局部運動按摩（價值 300 元）】！讓緊繃的肌肉立刻得到專業釋放。免去現場掏錢對帳，運動完輕鬆帶著輕盈身體回家！</p>
+            <p className="mt-2">線上完成 LINE Pay 付款，教練體驗課結束後，即可免費預約<strong className="font-black text-stone-800">15 分鐘局部運動按摩（價值 300 元）</strong>。免去現場付款與對帳，流程更輕鬆。</p>
           )}
         </div>
       </div>
@@ -1715,7 +1724,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         type="button"
         onClick={() => processPayment('到店付款')}
         disabled={isRegistering}
-        className="w-full rounded-xl border-2 border-sage-300 bg-gradient-to-b from-white to-sage-50 px-4 py-4 text-base sm:text-lg font-black text-sage-900 shadow-sm transition hover:border-sage-500 hover:from-sage-50 hover:to-sage-100 hover:shadow-md disabled:cursor-wait disabled:opacity-50"
+        className="w-full rounded-xl bg-sage-100 px-4 py-4.5 text-[17px] sm:text-lg font-black text-sage-950 transition hover:bg-sage-200 disabled:cursor-wait disabled:opacity-50"
       >
         到店付款
       </button>
@@ -1799,7 +1808,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         <div className={step === 1 ? 'mt-4 text-center' : 'mt-3 pt-3 border-t border-sage-100'}>
           {step === 2 && member ? (
             <>
-              <p className="text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
+              <p className="text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.registeredName || member.name)}，{getGreetingPeriod()}您好!!</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className="rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0">
                   <span className="text-[13px] font-bold text-stone-500 shrink-0">生日</span>
@@ -2346,7 +2355,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                     {/* Member Profile Dashboard Card */}
                     <div className={`bg-sage-50/70 p-4 sm:p-5 rounded-2xl border border-sage-100 flex-col md:flex-row justify-between gap-4 ${welcomeIsVenueRentMember && !welcomeIsPremiumMember ? 'flex' : 'hidden lg:flex'}`}>
                       <div className="hidden lg:block space-y-3 flex-1">
-                        <p className="hidden lg:block text-stone-900 font-black text-lg sm:text-xl leading-tight">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
+                        <p className="hidden lg:block text-stone-900 font-black text-lg sm:text-xl leading-tight">親愛的 {getFriendlyDisplayName(member.registeredName || member.name)}，{getGreetingPeriod()}您好!!</p>
                         <div className="grid grid-cols-2 gap-2 text-[11px] sm:text-sm text-stone-600 font-semibold">
                           <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span className="shrink-0 text-stone-500">生日</span><span className="shrink-0 text-stone-300">|</span><span className="min-w-0 font-sans font-bold text-stone-800 text-[11px] sm:text-sm whitespace-nowrap">{member.birthday}</span>
