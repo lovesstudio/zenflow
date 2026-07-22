@@ -1782,14 +1782,12 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       )}
       
       {/* HEADER FOR MOBILE / TABLET */}
-      <div className={`lg:hidden border-b border-sage-100 shadow-sm ${step === 1 ? 'bg-gradient-to-b from-white via-white to-sage-50/70 px-5 pt-8 pb-7' : 'bg-white px-3 min-[390px]:px-4 py-4'}`}>
+      <div className={`lg:hidden ${step === 1 ? 'bg-gradient-to-b from-white via-sage-50/35 to-transparent px-5 pt-10 pb-7' : 'border-b border-sage-100 bg-white px-3 min-[390px]:px-4 py-4 shadow-sm'}`}>
         <div className={step === 1 ? 'text-center' : 'grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 min-[390px]:gap-3'}>
-          <div className={step === 1 ? 'inline-flex flex-col items-stretch' : 'min-w-0 h-[62px] flex flex-col justify-between py-0.5'}>
-            <h1 className={`zen-flow-wordmark leading-[0.88] text-sage-950 whitespace-nowrap ${step === 1 ? 'text-[54px] min-[390px]:text-[60px] tracking-[-0.025em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
-            <p className={`${step === 1 ? 'mt-2 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.08em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
-              {step === 1 ? (
-                <><span>Massage,</span><span>Fitness</span><span>&amp;</span><span>Nutrition</span></>
-              ) : 'Massage, Fitness & Nutrition'}
+          <div className={step === 1 ? 'inline-flex flex-col items-center' : 'min-w-0 h-[62px] flex flex-col justify-between py-0.5'}>
+            <h1 className={`zen-flow-wordmark text-sage-950 whitespace-nowrap ${step === 1 ? 'text-[50px] min-[390px]:text-[56px] leading-[0.92] tracking-[-0.035em]' : 'text-[38px] min-[390px]:text-[44px] leading-[0.88]'}`}>ZEN FLOW</h1>
+            <p className={`${step === 1 ? 'mt-3 text-[10.5px] min-[390px]:text-[11.5px] tracking-[0.16em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
+              {step === 1 ? 'Massage · Fitness · Nutrition' : 'Massage, Fitness & Nutrition'}
             </p>
           </div>
           {step === 2 && member && (
@@ -1880,32 +1878,31 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
             </>
           ) : (
             <div className="font-sans text-stone-700">
-              <div className="mx-auto mb-3 h-px w-10 bg-sage-300" />
-              <p className="text-[18px] min-[390px]:text-[20px] font-extrabold tracking-[0.12em]">流動的身心平衡</p>
-              <p className="mt-2 text-[12px] min-[390px]:text-[13px] font-semibold tracking-[0.18em] text-sage-600">專屬線上預約系統</p>
+              <div className="mx-auto mb-3.5 h-px w-12 bg-sage-300" />
+              <p className="text-[19px] min-[390px]:text-[21px] font-extrabold tracking-[0.1em]">流動的身心平衡</p>
+              <p className="mt-2.5 text-[11.5px] min-[390px]:text-[12.5px] font-bold tracking-[0.2em] text-sage-600">專屬線上預約系統</p>
             </div>
           )}
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6 sm:p-6 lg:p-10">
-        <div className={`grid grid-cols-1 lg:grid-cols-12 items-start ${step === 1 ? 'gap-0 lg:gap-8 rounded-3xl shadow-lg lg:rounded-none lg:shadow-none' : 'gap-8'}`}>
+        <div className={`grid grid-cols-1 lg:grid-cols-12 items-start ${step === 1 ? 'gap-5 lg:gap-8' : 'gap-8'}`}>
           
           {/* LEFT COLUMN: Store Profile / Vibe Introductions (Responsive desktop side, mobile below) */}
           <div className="lg:col-span-4 space-y-6 order-2 lg:order-1">
-            <div className={`bg-white p-4 min-[390px]:p-5 sm:p-8 border border-sage-100 relative overflow-hidden ${step === 1 ? 'rounded-t-none rounded-b-3xl border-t-0 shadow-none lg:rounded-3xl lg:border-t lg:shadow-md' : 'rounded-3xl shadow-md'}`}>
+            <div className={`relative overflow-hidden ${step === 1 ? 'bg-transparent px-1 py-5 min-[390px]:px-2 sm:p-8 border-0 border-t border-sage-200/70 shadow-none lg:bg-white lg:p-8 lg:rounded-3xl lg:border lg:border-sage-100 lg:shadow-md' : 'bg-white p-4 min-[390px]:p-5 sm:p-8 border border-sage-100 rounded-3xl shadow-md'}`}>
               <div className="absolute -top-20 -left-20 w-40 h-40 bg-sage-100/40 rounded-full filter blur-2xl"></div>
               <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-sage-200/20 rounded-full filter blur-2xl"></div>
               
               <div className="relative z-10">
                 {/* Desktop Store Logo Header */}
                 <div className="hidden lg:block mb-8">
-                  <h1 className="zen-flow-wordmark text-[52px] leading-[0.9] text-sage-900">ZEN FLOW</h1>
-                  <p className="text-[11px] leading-none text-sage-600 font-bold mt-0.5 uppercase">Massage, Fitness & Nutrition</p>
-                  <div className="h-[2px] w-12 bg-sage-300 my-4"></div>
-                  <p className="text-stone-600 font-medium text-lg leading-relaxed font-serif italic">
-                    「在靜謐之中，尋回靈魂的頻率。」
-                  </p>
+                  <h1 className="zen-flow-wordmark text-[50px] leading-[0.92] tracking-[-0.035em] text-sage-900">ZEN FLOW</h1>
+                  <p className="mt-2.5 text-[10.5px] leading-none tracking-[0.13em] text-sage-600 font-bold uppercase">Massage · Fitness · Nutrition</p>
+                  <div className="h-px w-12 bg-sage-300 my-5"></div>
+                  <p className="text-[19px] font-extrabold tracking-[0.08em] text-stone-700">流動的身心平衡</p>
+                  <p className="mt-2 text-[11px] font-bold tracking-[0.18em] text-sage-600">專屬線上預約系統</p>
                 </div>
 
                 <div className="space-y-6">
@@ -1994,7 +1991,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
 
           {/* RIGHT COLUMN: Interactive Booking Dialogue Area */}
           <div className="lg:col-span-8 order-1 lg:order-2 w-full">
-            <div className={`bg-white border border-sage-100 overflow-hidden flex flex-col justify-between ${step === 1 ? `${loginType === 'member' ? 'min-h-0 lg:min-h-[550px]' : 'min-h-[550px]'} rounded-t-3xl rounded-b-none border-b-0 shadow-none lg:rounded-3xl lg:border-b lg:shadow-lg` : 'min-h-[550px] rounded-3xl shadow-lg'}`}>
+            <div className={`overflow-hidden flex flex-col justify-between ${step === 1 ? `${loginType === 'member' ? 'min-h-0 lg:min-h-[550px]' : 'min-h-[550px]'} bg-transparent border-0 shadow-none lg:bg-white lg:border lg:border-sage-100 lg:rounded-3xl lg:shadow-lg` : 'min-h-[550px] bg-white border border-sage-100 rounded-3xl shadow-lg'}`}>
               
               {/* Internal Dialogue App Header */}
               <div className="hidden lg:flex bg-sage-800 text-white p-5 sm:p-7 items-center justify-between gap-3">
@@ -2021,37 +2018,15 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                 
                 {/* STEP 1: LOGIN & REGISTRATION */}
                 {step === 1 && (
-                  <div className="max-w-md mx-auto overflow-hidden bg-white rounded-[28px] shadow-[0_18px_55px_-28px_rgba(54,79,65,0.38)] border border-sage-100/90 my-4">
+                  <div className="max-w-md mx-auto overflow-hidden bg-white/95 rounded-[24px] sm:rounded-[28px] shadow-[0_14px_38px_-26px_rgba(54,79,65,0.32)] border border-sage-100/80 my-0 lg:my-4">
                     {loginType === 'member' ? (
                       <div className="p-6 sm:p-9">
                         <div className="mb-8 pt-1 text-center">
                           <h2 className="text-[30px] leading-tight font-black tracking-[0.08em] text-sage-950">{isRegistering ? '會員註冊' : '會員登入'}</h2>
-                          <p className="mt-2 text-[13px] font-medium tracking-[0.04em] text-stone-500">{isRegistering ? '完成基本資料，即可開始預約服務' : '登入後即可管理您的專屬預約'}</p>
+                          <p className="mt-2 text-[13px] font-medium tracking-[0.04em] text-stone-500">{isRegistering ? '完成基本資料，即可開始預約服務' : '使用 LINE 完成身分驗證，即可開始預約'}</p>
                         </div>
                         
                         <div className="space-y-5">
-                          {!isRegistering && <div>
-                            <label className="mb-2 block text-[15px] font-bold text-stone-700">手機號碼</label>
-                            <div className="relative">
-                              <Phone className="absolute left-3.5 top-3.5 h-5 w-5 text-sage-400" />
-                              <input 
-                                type="tel" 
-                                inputMode="numeric"
-                                autoComplete="tel"
-                                maxLength={10}
-                                value={phone} 
-                                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                                disabled={isRegistering && !isLineProfileRegistration}
-                                className={`w-full pl-11 pr-4 py-3.5 border rounded-2xl focus:ring-2 focus:ring-sage-200 focus:border-sage-500 outline-none text-base transition ${
-                                  isRegistering && !isLineProfileRegistration ? 'bg-sage-100 text-stone-400 border-sage-200 cursor-not-allowed' : 'bg-white border-sage-200'
-                                }`}
-                                placeholder="0912345678"
-                              />
-                            </div>
-
-                            {/* Removed redundant staff login tip box as login flows are separated initially */}
-                          </div>}
-
                           {isRegistering && (
                             <div className="space-y-4 pt-5 border-t border-sage-100 animate-in fade-in slide-in-from-top-4 duration-300">
                               <div className="rounded-2xl border border-sage-200/80 bg-gradient-to-br from-sage-50 to-stone-50 p-4">
@@ -2169,23 +2144,15 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                           )}
 
                           {!isRegistering && (
-                            <div className="space-y-4">
+                            <div className="space-y-5 pt-1">
                               <button
                                 type="button"
                                 onClick={() => window.location.assign('/api/auth/line/start?returnTo=/')}
-                                className="w-full py-4 bg-[#06C755] text-white rounded-2xl hover:bg-[#05b74d] transition duration-200 flex items-center justify-center font-black text-base shadow-lg shadow-emerald-100"
+                                className="w-full py-4.5 bg-[#06C755] text-white rounded-2xl hover:bg-[#05b74d] transition duration-200 flex items-center justify-center font-black text-[17px] shadow-lg shadow-emerald-100"
                               >
                                 使用 LINE 快速登入
                               </button>
-                              <div className="flex items-center gap-3 text-xs font-bold text-stone-400" aria-hidden="true">
-                                <span className="h-px flex-1 bg-stone-200" />或使用手機號碼<span className="h-px flex-1 bg-stone-200" />
-                              </div>
-                              <button 
-                                onClick={handleLogin} 
-                                className="w-full py-4 bg-sage-800 text-white rounded-2xl hover:bg-sage-700 transition duration-200 mt-2 flex items-center justify-center font-bold text-base shadow-sm"
-                              >
-                                下一步 <ChevronRight className="w-5 h-5 ml-1" />
-                              </button>
+                              <p className="text-center text-xs leading-relaxed text-stone-400">首次登入將引導您完成會員基本資料</p>
                               <button
                                 type="button"
                                 onClick={() => {
