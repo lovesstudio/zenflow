@@ -188,9 +188,11 @@ function encodeValue(value: any): FirestoreValue {
 }
 
 async function getDocument(env: Env, path: string) {
-  const token = await getGoogleAccessToken(env);
+  const token = env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY
+    ? await getGoogleAccessToken(env)
+    : null;
   const response = await fetch(`${firestoreBase(env)}/${encodeDocumentPath(path)}`, {
-    headers: { authorization: `Bearer ${token}` }
+    headers: token ? { authorization: `Bearer ${token}` } : undefined
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`Firestore GET ${path} failed: ${response.status} ${await response.text()}`);
@@ -199,11 +201,16 @@ async function getDocument(env: Env, path: string) {
 }
 
 async function patchDocument(env: Env, path: string, fields: Record<string, any>) {
-  const token = await getGoogleAccessToken(env);
+  const token = env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY
+    ? await getGoogleAccessToken(env)
+    : null;
   const masks = Object.keys(fields).map(field => `updateMask.fieldPaths=${encodeURIComponent(field)}`).join('&');
   const response = await fetch(`${firestoreBase(env)}/${encodeDocumentPath(path)}?${masks}`, {
     method: 'PATCH',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      'content-type': 'application/json'
+    },
     body: JSON.stringify({ fields: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, encodeValue(value)])) })
   });
   if (!response.ok) throw new Error(`Firestore PATCH ${path} failed: ${response.status} ${await response.text()}`);
