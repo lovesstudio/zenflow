@@ -2,16 +2,8 @@ interface Fetcher {
   fetch(request: Request): Promise<Response>;
 }
 
-interface KVNamespace {
-  get(key: string, type?: 'text'): Promise<string | null>;
-  get<T>(key: string, type: 'json'): Promise<T | null>;
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
-  delete(key: string): Promise<void>;
-}
-
 interface Env {
   ASSETS: Fetcher;
-  USER_KV?: KVNamespace;
   LINE_CHANNEL_ACCESS_TOKEN: string;
   LINE_CHANNEL_SECRET: string;
   INTERNAL_WEBHOOK_SECRET: string;
@@ -66,12 +58,6 @@ const fromBase64Url = (input: string) => {
   return new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
 };
 
-const base64UrlToBytes = (input: string) => {
-  const padded = input.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - input.length % 4) % 4);
-  const binary = atob(padded);
-  return Uint8Array.from(binary, char => char.charCodeAt(0));
-};
-
 const randomBase64Url = (byteLength = 32) => {
   const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
@@ -104,38 +90,6 @@ async function verifySignedPayload<T>(secret: string, signed: string | undefined
   for (let index = 0; index < expected.length; index += 1) mismatch |= expected.charCodeAt(index) ^ signature.charCodeAt(index);
   if (mismatch !== 0) return null;
   try { return JSON.parse(fromBase64Url(encoded)) as T; } catch { return null; }
-}
-
-async function oauthEncryptionKey(secret: string) {
-  const keyBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`zenflow-oauth-state:${secret}`));
-  return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-}
-
-async function encryptOAuthState(secret: string, payload: OAuthState) {
-  const iv = new Uint8Array(12);
-  crypto.getRandomValues(iv);
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    await oauthEncryptionKey(secret),
-    new TextEncoder().encode(JSON.stringify(payload))
-  );
-  return `${base64Url(iv)}.${base64Url(new Uint8Array(encrypted))}`;
-}
-
-async function decryptOAuthState(secret: string, encryptedState: string | null): Promise<OAuthState | null> {
-  if (!encryptedState) return null;
-  const [ivText, cipherText] = encryptedState.split('.');
-  if (!ivText || !cipherText) return null;
-  try {
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: base64UrlToBytes(ivText) },
-      await oauthEncryptionKey(secret),
-      base64UrlToBytes(cipherText)
-    );
-    return JSON.parse(new TextDecoder().decode(decrypted)) as OAuthState;
-  } catch {
-    return null;
-  }
 }
 
 function getCookies(request: Request) {
@@ -255,33 +209,10 @@ async function patchDocument(env: Env, path: string, fields: Record<string, any>
 }
 
 type OAuthState = { state: string; nonce: string; verifier: string; returnTo: string; exp: number };
-type SessionMember = {
-  id: string;
-  name: string;
-  birthday: string;
-  gender: string;
-  level: string;
-  role: string;
-  roles: string[];
-  lineUserId: string;
-  createdAt: number;
-  isProfileCompleted?: boolean;
-};
-type LoginSession = { memberId: string; lineUserId: string; member?: SessionMember; exp: number };
+type LoginSession = { memberId: string; lineUserId: string; exp: number };
 
 function requireLoginConfiguration(env: Env) {
   return Boolean(env.LINE_LOGIN_CHANNEL_ID && env.LINE_LOGIN_CHANNEL_SECRET && env.SESSION_SIGNING_SECRET);
-}
-
-function missingBindings(env: Env, names: Array<keyof Env>) {
-  return names.filter(name => !env?.[name]);
-}
-
-function safeErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || 'Unknown error');
-  return message
-    .replace(/(client_secret|access_token|id_token|assertion|private_key)["'=:\s]+[^\s&",}]+/gi, '$1=[REDACTED]')
-    .slice(0, 1500);
 }
 
 async function startLineLogin(request: Request, env: Env) {
@@ -302,14 +233,13 @@ async function startLineLogin(request: Request, env: Env) {
     exp: Date.now() + 10 * 60 * 1000
   };
   const signedState = await signPayload(env.SESSION_SIGNING_SECRET!, oauthState);
-  const encryptedState = await encryptOAuthState(env.SESSION_SIGNING_SECRET!, oauthState);
   const redirectUri = `${appOrigin(request, env)}/api/auth/line/callback`;
   const authorize = new URL('https://access.line.me/oauth2/v2.1/authorize');
   authorize.search = new URLSearchParams({
     response_type: 'code',
     client_id: env.LINE_LOGIN_CHANNEL_ID!,
     redirect_uri: redirectUri,
-    state: encryptedState,
+    state,
     scope: 'openid profile',
     nonce,
     code_challenge: await sha256Base64Url(verifier),
@@ -320,7 +250,7 @@ async function startLineLogin(request: Request, env: Env) {
     status: 302,
     headers: {
       location: authorize.toString(),
-      'set-cookie': cookie('zf_oauth', signedState, 'HttpOnly; Secure; SameSite=None; Max-Age=600')
+      'set-cookie': cookie('zf_oauth', signedState, 'HttpOnly; Secure; SameSite=Lax; Max-Age=600')
     }
   });
 }
@@ -355,294 +285,64 @@ async function verifyLineIdToken(env: Env, idToken: string, nonce: string) {
 async function upsertLineMember(env: Env, profile: { sub: string; name?: string; picture?: string; email?: string }) {
   const identityPath = `lineIdentities/${profile.sub}`;
   const identity = await getDocument(env, identityPath);
-  let memberId = typeof identity?.memberId === 'string' ? identity.memberId : `line_${profile.sub}`;
-
-  if (env.USER_KV) {
-    try {
-      const kvMember = await env.USER_KV.get<Partial<SessionMember>>(`line_user:${profile.sub}`, 'json');
-      if (kvMember && kvMember.id && /^09\d{8}$/.test(kvMember.id.trim())) {
-        memberId = kvMember.id.trim();
-      }
-    } catch (e) {}
-  }
-
+  const memberId = typeof identity?.memberId === 'string' ? identity.memberId : `line_${profile.sub}`;
   const existing = await getDocument(env, `members/${memberId}`);
   const now = Date.now();
-
-  let name = existing?.name || profile.name || 'LINE 會員';
-  if (existing?.name && /^[\u4e00-\u9fa5]{2,4}$/.test(existing.name.trim())) {
-    name = existing.name.trim();
-  }
-
-  const isCompleted = Boolean(
-    existing?.isProfileCompleted ||
-    (memberId && /^09\d{8}$/.test(memberId.trim()) && name && /^[\u4e00-\u9fa5]{2,4}$/.test(name))
-  );
-
-  const member: SessionMember = {
+  const member = {
     ...(existing || {}),
     id: memberId,
-    name,
+    name: profile.name || existing?.name || 'LINE 會員',
     birthday: existing?.birthday || '',
     gender: existing?.gender || '女',
     level: existing?.level || '一般',
     role: existing?.role || 'member',
     roles: Array.isArray(existing?.roles) ? existing.roles : ['member'],
     lineUserId: profile.sub,
+    linePictureUrl: profile.picture || existing?.linePictureUrl || '',
+    lineEmail: profile.email || existing?.lineEmail || '',
     createdAt: existing?.createdAt || now,
-    isProfileCompleted: isCompleted,
+    lineLastLoginAt: now
   };
-
-  try {
-    await patchDocument(env, `members/${memberId}`, {
-      ...member,
-      linePictureUrl: profile.picture || existing?.linePictureUrl || '',
-      lineEmail: profile.email || existing?.lineEmail || '',
-      lineLastLoginAt: now
-    });
-    await patchDocument(env, identityPath, { memberId, lineUserId: profile.sub, updatedAt: now });
-  } catch (fsErr) {
-    console.warn('Firestore sync skipped or failed in upsertLineMember:', fsErr);
-  }
-
-  if (env.USER_KV) {
-    try {
-      await env.USER_KV.put(`line_user:${profile.sub}`, JSON.stringify(member));
-    } catch (e) {}
-  }
-
+  await patchDocument(env, `members/${memberId}`, member);
+  await patchDocument(env, identityPath, { memberId, lineUserId: profile.sub, updatedAt: now });
   return member;
 }
 
 async function finishLineLogin(request: Request, env: Env) {
-  const requestId = crypto.randomUUID();
-  let stage = 'configuration';
-  try {
-    const missingLoginBindings = missingBindings(env, [
-      'LINE_LOGIN_CHANNEL_ID',
-      'LINE_LOGIN_CHANNEL_SECRET',
-      'SESSION_SIGNING_SECRET'
-    ]);
-    if (missingLoginBindings.length) {
-      return json({
-        ok: false,
-        error: 'LINE_LOGIN_NOT_CONFIGURED',
-        stage,
-        missingBindings: missingLoginBindings,
-        requestId
-      }, 503);
-    }
-
-    stage = 'oauth_state_validation';
-    const url = new URL(request.url);
-    const oauthCookie = getCookies(request).zf_oauth;
-    const cookieState = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, oauthCookie);
-    const code = url.searchParams.get('code');
-    const returnedState = url.searchParams.get('state');
-    const encryptedState = await decryptOAuthState(env.SESSION_SIGNING_SECRET!, returnedState);
-    const stateCookie = cookieState || encryptedState;
-    const stateSourcesAgree = !cookieState || !encryptedState || cookieState.state === encryptedState.state;
-    if (url.searchParams.get('error')) {
-      return json({ ok: false, error: 'LINE_LOGIN_DENIED', stage, lineError: url.searchParams.get('error'), requestId }, 400);
-    }
-    if (!code || !stateCookie || stateCookie.exp < Date.now() || !stateSourcesAgree) {
-      return json({
-        ok: false,
-        error: 'INVALID_OR_EXPIRED_OAUTH_STATE',
-        stage,
-        diagnostics: {
-          hasCode: Boolean(code),
-          hasOAuthCookie: Boolean(oauthCookie),
-          validSignedCookie: Boolean(cookieState),
-          validEncryptedState: Boolean(encryptedState),
-          recoveredFromEncryptedState: Boolean(!cookieState && encryptedState),
-          stateMatches: stateSourcesAgree,
-          stateExpired: Boolean(stateCookie && stateCookie.exp < Date.now())
-        },
-        requestId
-      }, 400);
-    }
-
-    stage = 'line_token_exchange';
-    const tokens = await exchangeLineLoginCode(request, env, code, stateCookie.verifier);
-
-    stage = 'line_id_token_verification';
-    const profile = await verifyLineIdToken(env, tokens.id_token, stateCookie.nonce);
-    if (!/^U[0-9a-f]{32}$/i.test(profile.sub)) {
-      return json({ ok: false, error: 'INVALID_LINE_USER_ID', stage, requestId }, 400);
-    }
-
-    stage = 'firebase_member_upsert';
-    const missingFirebaseBindings = missingBindings(env, [
-      'FIREBASE_PROJECT_ID',
-      'FIREBASE_CLIENT_EMAIL',
-      'FIREBASE_PRIVATE_KEY'
-    ]);
-    const fallbackMember: SessionMember = {
-      id: `line_${profile.sub}`,
-      name: profile.name || 'LINE 會員',
-      birthday: '',
-      gender: '女',
-      level: '一般',
-      role: 'member',
-      roles: ['member'],
-      lineUserId: profile.sub,
-      createdAt: Date.now()
-    };
-    let member: any = fallbackMember;
-
-    if (missingFirebaseBindings.length > 0) {
-      console.warn('LINE Login skipping Firebase persistence due to missing Firebase credentials', {
-        requestId,
-        missingBindings: missingFirebaseBindings
-      });
-    } else {
-      try {
-        member = await upsertLineMember(env, profile);
-      } catch (fbError) {
-        console.warn('Firebase member upsert failed, continuing with fallback session member', {
-          requestId,
-          error: safeErrorMessage(fbError)
-        });
-        member = fallbackMember;
-      }
-    }
-
-    if (env.USER_KV && profile.sub) {
-      try {
-        const kvMember = await env.USER_KV.get<Partial<SessionMember>>(`line_user:${profile.sub}`, 'json');
-        if (kvMember && typeof kvMember === 'object' && kvMember.id) {
-          member = { ...member, ...kvMember };
-        }
-      } catch (kvErr) {
-        console.warn('USER_KV lookup failed in finishLineLogin', kvErr);
-      }
-    }
-
-    stage = 'session_creation';
-    const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
-      memberId: member.id,
-      lineUserId: profile.sub,
-      member: {
-        id: member.id,
-        name: member.name || fallbackMember.name,
-        birthday: member.birthday || '',
-        gender: member.gender || '女',
-        level: member.level || '一般',
-        role: member.role || 'member',
-        roles: Array.isArray(member.roles) ? member.roles : ['member'],
-        lineUserId: profile.sub,
-        createdAt: Number(member.createdAt) || fallbackMember.createdAt
-      },
-      exp: Date.now() + 30 * 24 * 60 * 60 * 1000
-    } satisfies LoginSession);
-    const redirect = new URL(stateCookie.returnTo, appOrigin(request, env));
-    redirect.searchParams.set('lineLogin', 'success');
-    const headers = new Headers({ location: redirect.toString() });
-    headers.append('set-cookie', cookie('zf_session', session, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000'));
-    headers.append('set-cookie', cookie('zf_oauth', '', 'HttpOnly; Secure; SameSite=None; Max-Age=0'));
-    return new Response(null, { status: 302, headers });
-  } catch (error) {
-    console.error('LINE Login callback failed', { requestId, stage, error });
-    return json({
-      ok: false,
-      error: 'LINE_LOGIN_CALLBACK_FAILED',
-      stage,
-      message: safeErrorMessage(error),
-      requestId
-    }, 500);
-  }
+  if (!requireLoginConfiguration(env)) return json({ error: 'LINE_LOGIN_NOT_CONFIGURED' }, 503);
+  const url = new URL(request.url);
+  const stateCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  if (url.searchParams.get('error')) return json({ error: 'LINE_LOGIN_DENIED' }, 400);
+  if (!code || !stateCookie || stateCookie.exp < Date.now() || stateCookie.state !== state) return json({ error: 'INVALID_OR_EXPIRED_OAUTH_STATE' }, 400);
+  const tokens = await exchangeLineLoginCode(request, env, code, stateCookie.verifier);
+  const profile = await verifyLineIdToken(env, tokens.id_token, stateCookie.nonce);
+  if (!/^U[0-9a-f]{32}$/i.test(profile.sub)) return json({ error: 'INVALID_LINE_USER_ID' }, 400);
+  const member = await upsertLineMember(env, profile);
+  const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
+    memberId: member.id,
+    lineUserId: profile.sub,
+    exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+  } satisfies LoginSession);
+  const redirect = new URL(stateCookie.returnTo, appOrigin(request, env));
+  redirect.searchParams.set('lineLogin', 'success');
+  const headers = new Headers({ location: redirect.toString() });
+  headers.append('set-cookie', cookie('zf_session', session, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000'));
+  headers.append('set-cookie', cookie('zf_oauth', '', 'HttpOnly; Secure; SameSite=Lax; Max-Age=0'));
+  return new Response(null, {
+    status: 302,
+    headers
+  });
 }
 
 async function getLoginSession(request: Request, env: Env) {
   if (!env.SESSION_SIGNING_SECRET) return json({ authenticated: false });
   const session = await verifySignedPayload<LoginSession>(env.SESSION_SIGNING_SECRET, getCookies(request).zf_session);
   if (!session || session.exp < Date.now()) return json({ authenticated: false });
-  
-  if (session.member?.lineUserId !== session.lineUserId) return json({ authenticated: false });
-
-  let currentMember = session.member;
-
-  if (env.USER_KV && session.lineUserId) {
-    try {
-      const kvMember = await env.USER_KV.get<Partial<SessionMember>>(`line_user:${session.lineUserId}`, 'json');
-      if (kvMember && typeof kvMember === 'object' && kvMember.id) {
-        currentMember = { ...currentMember, ...kvMember };
-      }
-    } catch (kvErr) {
-      console.warn('USER_KV lookup failed in getLoginSession', kvErr);
-    }
-  }
-
-  return json({ authenticated: true, member: currentMember, persistence: 'kv_session' });
-}
-
-async function saveUserProfile(request: Request, env: Env) {
-  if (!env.SESSION_SIGNING_SECRET) return json({ ok: false, error: 'NO_SESSION_SECRET' }, 500);
-  const session = await verifySignedPayload<LoginSession>(env.SESSION_SIGNING_SECRET, getCookies(request).zf_session);
-  if (!session || session.exp < Date.now() || !session.lineUserId) {
-    return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
-  }
-
-  const body = await request.json() as { name?: string; phone?: string; birthday?: string; gender?: string };
-  const name = body.name?.trim() || '';
-  const phone = body.phone?.trim() || '';
-
-  if (!name || !/^[\u4e00-\u9fa5]{2,4}$/.test(name)) return json({ ok: false, error: 'INVALID_NAME_FORMAT' }, 400);
-  if (!/^09\d{8}$/.test(phone)) return json({ ok: false, error: 'INVALID_PHONE_FORMAT' }, 400);
-
-  const updatedMember: SessionMember = {
-    ...session.member,
-    id: phone,
-    name,
-    birthday: body.birthday || session.member?.birthday || '',
-    gender: body.gender || session.member?.gender || '女',
-    level: session.member?.level || '一般',
-    role: session.member?.role || 'member',
-    roles: session.member?.roles || ['member'],
-    createdAt: session.member?.createdAt || Date.now(),
-    lineUserId: session.lineUserId,
-    isProfileCompleted: true
-  };
-
-  if (env.USER_KV) {
-    try {
-      const payloadStr = JSON.stringify(updatedMember);
-      await env.USER_KV.put(`line_user:${session.lineUserId}`, payloadStr);
-      await env.USER_KV.put(`phone:${phone}`, payloadStr);
-    } catch (kvErr) {
-      console.error('Failed to save user profile to USER_KV:', kvErr);
-    }
-  }
-
-  try {
-    const identityPath = `lineIdentities/${session.lineUserId}`;
-    await patchDocument(env, identityPath, { memberId: phone, lineUserId: session.lineUserId, updatedAt: Date.now() });
-    await patchDocument(env, `members/${phone}`, {
-      ...updatedMember,
-      id: phone,
-      name,
-      lineUserId: session.lineUserId,
-      isProfileCompleted: true,
-      updatedAt: Date.now()
-    });
-  } catch (fsErr) {
-    console.warn('Firestore profile sync failed or skipped in saveUserProfile:', fsErr);
-  }
-
-  const newSessionToken = await signPayload(env.SESSION_SIGNING_SECRET, {
-    ...session,
-    memberId: phone,
-    member: updatedMember
-  } satisfies LoginSession);
-
-  return new Response(JSON.stringify({ ok: true, member: updatedMember }), {
-    status: 200,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'set-cookie': cookie('zf_session', newSessionToken, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000')
-    }
-  });
+  const member = await getDocument(env, `members/${session.memberId}`);
+  if (!member || member.lineUserId !== session.lineUserId) return json({ authenticated: false });
+  return json({ authenticated: true, member });
 }
 
 function logoutLineSession() {
@@ -829,9 +529,6 @@ export default {
       }
       if (request.method === 'GET' && url.pathname === '/api/auth/session') {
         return getLoginSession(request, env);
-      }
-      if (request.method === 'POST' && url.pathname === '/api/user/profile') {
-        return saveUserProfile(request, env);
       }
       if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
         return logoutLineSession();
