@@ -1,12 +1,20 @@
 {
   "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
   "name": "zenflow",
-  "compatibility_date": "2026-07-21",
   "main": "./worker/index.ts",
+  "compatibility_date": "2026-07-21",
+  "keep_vars": true,
+  "vars": {
+    "APP_ORIGIN": "https://zenflow.com.tw",
+    "FIREBASE_PROJECT_ID": "project-09054e85-fe75-4f73-a3d",
+    "FIREBASE_DATABASE_ID": "ai-studio-ab68fdae-75a1-4c4e-b55e-fc65b5115e63"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
   }
 }
