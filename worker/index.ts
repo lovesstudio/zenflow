@@ -1,3 +1,4 @@
+// EZ Pages release: 2026-07-22-line-profile-fix-v2
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
 }
@@ -208,7 +209,7 @@ async function patchDocument(env: Env, path: string, fields: Record<string, any>
   if (!response.ok) throw new Error(`Firestore PATCH ${path} failed: ${response.status} ${await response.text()}`);
 }
 
-type OAuthState = { state: string; nonce: string; verifier: string; returnTo: string; exp: number };
+type OAuthState = { state: string; nonce: string; returnTo: string; exp: number };
 type LoginSession = { memberId: string; lineUserId: string; exp: number };
 
 function requireLoginConfiguration(env: Env) {
@@ -224,11 +225,9 @@ async function startLineLogin(request: Request, env: Env) {
   }
   const state = randomBase64Url();
   const nonce = randomBase64Url();
-  const verifier = randomBase64Url(48);
   const oauthState: OAuthState = {
     state,
     nonce,
-    verifier,
     returnTo: safeReturnTo(url.searchParams.get('returnTo')),
     exp: Date.now() + 10 * 60 * 1000
   };
@@ -239,11 +238,9 @@ async function startLineLogin(request: Request, env: Env) {
     response_type: 'code',
     client_id: env.LINE_LOGIN_CHANNEL_ID!,
     redirect_uri: redirectUri,
-    state,
+    state: signedState,
     scope: 'openid profile',
     nonce,
-    code_challenge: await sha256Base64Url(verifier),
-    code_challenge_method: 'S256',
     bot_prompt: 'normal'
   }).toString();
   return new Response(null, {
@@ -255,7 +252,7 @@ async function startLineLogin(request: Request, env: Env) {
   });
 }
 
-async function exchangeLineLoginCode(request: Request, env: Env, code: string, verifier: string) {
+async function exchangeLineLoginCode(request: Request, env: Env, code: string) {
   const response = await fetch('https://api.line.me/oauth2/v2.1/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -264,8 +261,7 @@ async function exchangeLineLoginCode(request: Request, env: Env, code: string, v
       code,
       redirect_uri: `${appOrigin(request, env)}/api/auth/line/callback`,
       client_id: env.LINE_LOGIN_CHANNEL_ID!,
-      client_secret: env.LINE_LOGIN_CHANNEL_SECRET!,
-      code_verifier: verifier
+      client_secret: env.LINE_LOGIN_CHANNEL_SECRET!
     })
   });
   if (!response.ok) throw new Error(`LINE Login token exchange failed: ${response.status} ${await response.text()}`);
@@ -300,6 +296,12 @@ async function upsertLineMember(env: Env, profile: { sub: string; name?: string;
     lineUserId: profile.sub,
     linePictureUrl: profile.picture || existing?.linePictureUrl || '',
     lineEmail: profile.email || existing?.lineEmail || '',
+    isProfileCompleted: existing?.isProfileCompleted === true || (
+      /^09\d{8}$/.test(memberId) &&
+      typeof existing?.name === 'string' &&
+      /^[\u3400-\u4DBF\u4E00-\u9FFF]{1,4}$/u.test(existing.name) &&
+      typeof existing?.birthday === 'string' && existing.birthday.length > 0
+    ),
     createdAt: existing?.createdAt || now,
     lineLastLoginAt: now
   };
@@ -308,16 +310,80 @@ async function upsertLineMember(env: Env, profile: { sub: string; name?: string;
   return member;
 }
 
+async function completeLineProfile(request: Request, env: Env) {
+  if (!env.SESSION_SIGNING_SECRET) return json({ ok: false, error: 'LINE_LOGIN_NOT_CONFIGURED' }, 503);
+  const session = await verifySignedPayload<LoginSession>(env.SESSION_SIGNING_SECRET, getCookies(request).zf_session);
+  if (!session || session.exp < Date.now()) return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
+
+  const input = await request.json() as { name?: string; phone?: string; birthday?: string; gender?: string; lineId?: string };
+  const name = (input.name || '').trim();
+  const phone = (input.phone || '').replace(/\D/g, '');
+  const birthday = (input.birthday || '').trim();
+  if (!/^[\u3400-\u4DBF\u4E00-\u9FFF]{1,4}$/u.test(name)) {
+    return json({ ok: false, error: 'INVALID_NAME', message: '姓名限填 1 至 4 個中文字。' }, 400);
+  }
+  if (!/^09\d{8}$/.test(phone)) {
+    return json({ ok: false, error: 'INVALID_PHONE', message: '請輸入正確的台灣手機號碼（09 開頭，共 10 碼）。' }, 400);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
+    return json({ ok: false, error: 'INVALID_BIRTHDAY', message: '請選擇生日。' }, 400);
+  }
+
+  const current = await getDocument(env, `members/${session.memberId}`);
+  if (!current || current.lineUserId !== session.lineUserId) return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
+  const phoneMember = await getDocument(env, `members/${phone}`);
+  if (phoneMember?.lineUserId && phoneMember.lineUserId !== session.lineUserId) {
+    return json({ ok: false, error: 'PHONE_ALREADY_LINKED', message: '此手機號碼已綁定其他 LINE 帳號，請聯絡店家協助。' }, 409);
+  }
+
+  const now = Date.now();
+  const member = {
+    ...current,
+    ...(phoneMember || {}),
+    id: phone,
+    name,
+    birthday,
+    gender: input.gender === '男' ? '男' : '女',
+    lineId: (input.lineId || '').trim(),
+    lineUserId: session.lineUserId,
+    isProfileCompleted: true,
+    createdAt: phoneMember?.createdAt || current.createdAt || now,
+    updatedAt: now
+  };
+  await patchDocument(env, `members/${phone}`, member);
+  await patchDocument(env, `lineIdentities/${session.lineUserId}`, {
+    memberId: phone,
+    lineUserId: session.lineUserId,
+    updatedAt: now
+  });
+
+  const renewedSession = await signPayload(env.SESSION_SIGNING_SECRET, {
+    memberId: phone,
+    lineUserId: session.lineUserId,
+    exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+  } satisfies LoginSession);
+  return new Response(JSON.stringify({ ok: true, member }), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'set-cookie': cookie('zf_session', renewedSession, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000')
+    }
+  });
+}
+
 async function finishLineLogin(request: Request, env: Env) {
   if (!requireLoginConfiguration(env)) return json({ error: 'LINE_LOGIN_NOT_CONFIGURED' }, 503);
   const url = new URL(request.url);
-  const stateCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
   const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state');
+  const returnedState = url.searchParams.get('state');
+  const stateFromParam = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, returnedState || undefined);
+  const stateFromCookie = await verifySignedPayload<OAuthState>(env.SESSION_SIGNING_SECRET!, getCookies(request).zf_oauth);
+  const oauthState = stateFromParam || (
+    stateFromCookie && stateFromCookie.state === returnedState ? stateFromCookie : null
+  );
   if (url.searchParams.get('error')) return json({ error: 'LINE_LOGIN_DENIED' }, 400);
-  if (!code || !stateCookie || stateCookie.exp < Date.now() || stateCookie.state !== state) return json({ error: 'INVALID_OR_EXPIRED_OAUTH_STATE' }, 400);
-  const tokens = await exchangeLineLoginCode(request, env, code, stateCookie.verifier);
-  const profile = await verifyLineIdToken(env, tokens.id_token, stateCookie.nonce);
+  if (!code || !oauthState || oauthState.exp < Date.now()) return json({ error: 'INVALID_OR_EXPIRED_OAUTH_STATE' }, 400);
+  const tokens = await exchangeLineLoginCode(request, env, code);
+  const profile = await verifyLineIdToken(env, tokens.id_token, oauthState.nonce);
   if (!/^U[0-9a-f]{32}$/i.test(profile.sub)) return json({ error: 'INVALID_LINE_USER_ID' }, 400);
   const member = await upsertLineMember(env, profile);
   const session = await signPayload(env.SESSION_SIGNING_SECRET!, {
@@ -325,7 +391,7 @@ async function finishLineLogin(request: Request, env: Env) {
     lineUserId: profile.sub,
     exp: Date.now() + 30 * 24 * 60 * 60 * 1000
   } satisfies LoginSession);
-  const redirect = new URL(stateCookie.returnTo, appOrigin(request, env));
+  const redirect = new URL(oauthState.returnTo, appOrigin(request, env));
   redirect.searchParams.set('lineLogin', 'success');
   const headers = new Headers({ location: redirect.toString() });
   headers.append('set-cookie', cookie('zf_session', session, 'HttpOnly; Secure; SameSite=Lax; Max-Age=2592000'));
@@ -529,6 +595,9 @@ export default {
       }
       if (request.method === 'GET' && url.pathname === '/api/auth/session') {
         return getLoginSession(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/auth/profile') {
+        return completeLineProfile(request, env);
       }
       if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
         return logoutLineSession();
