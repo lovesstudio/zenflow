@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+// EZ Pages release: 2026-07-22-line-profile-fix-v2
 import { db, COURSES, Member, OrderItem, Order, calculateDiscount, ALL_TIME_SLOTS, isSlotAvailable, isDayAvailable, Gender, TherapistPreference, timeToMins, minsToTime, getDiscountStatus, sortOrderItems, TherapistAvailability, getSlotStatus, SlotStatus, isTimeRangeCovered, getDetailedSlotStatus, Promotion } from './store';
 import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X, ChevronLeft, ChevronDown, LogOut, ShieldAlert, Award, Star, Compass, MapPin } from 'lucide-react';
 
@@ -376,6 +377,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   const [lineId, setLineId] = useState('');
   const [gender, setGender] = useState<Gender>('女');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isLineProfileRegistration, setIsLineProfileRegistration] = useState(false);
   const [loginType, setLoginType] = useState<'member' | 'staff'>('member');
   const [staffPhone, setStaffPhone] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
@@ -394,6 +396,18 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       .then(session => {
         if (!session.authenticated || !session.member) return;
         const lineMember = session.member as Member;
+        if (lineMember.isProfileCompleted !== true) {
+          setMember(lineMember);
+          setPhone(/^09\d{8}$/.test(lineMember.id) ? lineMember.id : '');
+          setName(/^[\u3400-\u4DBF\u4E00-\u9FFF]{1,4}$/u.test(lineMember.name || '') ? lineMember.name : '');
+          setBirthday(lineMember.birthday || '');
+          setGender(lineMember.gender === '男' ? '男' : '女');
+          setLineId(lineMember.lineId || '');
+          setIsLineProfileRegistration(true);
+          setIsRegistering(true);
+          setStep(1);
+          return;
+        }
         setMember(lineMember);
         setPhone(lineMember.id);
         localStorage.removeItem('zf_authed_user');
@@ -846,7 +860,10 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   }, []);
 
   const handleLogin = async () => {
-    if (!phone) return;
+    if (!/^09\d{8}$/.test(phone)) {
+      alert('請輸入正確的台灣手機號碼（09 開頭，共 10 碼）。');
+      return;
+    }
     
     // Check locally first
     let m = db.getMemberByPhone(phone);
@@ -873,16 +890,56 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     }
   };
 
-  const handleRegister = () => {
-    if (!name || !birthday || !phone) return;
+  const handleRegister = async () => {
+    const normalizedName = name.trim();
+    const normalizedPhone = phone.replace(/\D/g, '');
+    const normalizedBirthday = birthday.trim().replace(/\//g, '-');
+    if (!/^[\u3400-\u4DBF\u4E00-\u9FFF]{1,4}$/u.test(normalizedName)) {
+      alert('姓名限填 1 至 4 個中文字。');
+      return;
+    }
+    if (!/^09\d{8}$/.test(normalizedPhone)) {
+      alert('請輸入正確的台灣手機號碼（09 開頭，共 10 碼）。');
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedBirthday) || Number.isNaN(new Date(`${normalizedBirthday}T00:00:00`).getTime())) {
+      alert('請輸入正確的生日格式，例如 1990/05/20。');
+      return;
+    }
+
+    if (isLineProfileRegistration) {
+      const response = await fetch('/api/auth/profile', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: normalizedName, phone: normalizedPhone, birthday: normalizedBirthday, gender })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.member) {
+        alert(result.message || '會員資料儲存失敗，請稍後再試。');
+        return;
+      }
+      const completedMember = result.member as Member;
+      db.saveMember(completedMember);
+      setMember(completedMember);
+      setPhone(completedMember.id);
+      localStorage.removeItem('zf_authed_user');
+      localStorage.setItem('zf_login_phone', completedMember.id);
+      window.dispatchEvent(new Event('zf-auth-change'));
+      setIsLineProfileRegistration(false);
+      setIsRegistering(false);
+      setFrontendTab(canAccessVenueBooking(completedMember) ? 'venue' : 'booking');
+      setStep(2);
+      return;
+    }
     
     // Double check if member already exists to prevent duplicates
-    const existing = db.getMemberByPhone(phone);
+    const existing = db.getMemberByPhone(normalizedPhone);
     if (existing) {
       alert('此手機號碼已經註冊過囉！系統將自動為您登入。');
       setMember(existing);
       localStorage.removeItem('zf_authed_user');
-      localStorage.setItem('zf_login_phone', phone);
+      localStorage.setItem('zf_login_phone', normalizedPhone);
       window.dispatchEvent(new Event('zf-auth-change'));
       setIsRegistering(false);
       setName('');
@@ -893,9 +950,9 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     }
 
     const newMember: Member = {
-      id: phone,
-      name,
-      birthday,
+      id: normalizedPhone,
+      name: normalizedName,
+      birthday: normalizedBirthday,
       gender,
       lineId,
       level: '一般',
@@ -903,7 +960,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     };
     db.saveMember(newMember);
     localStorage.removeItem('zf_authed_user');
-    localStorage.setItem('zf_login_phone', phone);
+    localStorage.setItem('zf_login_phone', normalizedPhone);
     window.dispatchEvent(new Event('zf-auth-change'));
     setMember(newMember);
     setIsRegistering(false);
@@ -916,6 +973,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
     localStorage.removeItem('zf_authed_user');
     window.dispatchEvent(new Event('zf-auth-change'));
     setMember(null);
+    setIsLineProfileRegistration(false);
     setPhone('');
     setCart([]);
     setStep(1);
@@ -1715,11 +1773,11 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       )}
       
       {/* HEADER FOR MOBILE / TABLET */}
-      <div className={`lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
+      <div className={`lg:hidden border-b border-sage-100 shadow-sm ${step === 1 ? 'bg-gradient-to-b from-white via-white to-sage-50/70 px-5 pt-8 pb-7' : 'bg-white px-3 min-[390px]:px-4 py-4'}`}>
         <div className={step === 1 ? 'text-center' : 'grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 min-[390px]:gap-3'}>
           <div className={step === 1 ? 'inline-flex flex-col items-stretch' : 'min-w-0 h-[62px] flex flex-col justify-between py-0.5'}>
-            <h1 className={`zen-flow-wordmark leading-[0.9] text-sage-900 whitespace-nowrap ${step === 1 ? 'text-[48px] min-[390px]:text-[54px] tracking-[0.02em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
-            <p className={`${step === 1 ? 'mt-1 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.04em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
+            <h1 className={`zen-flow-wordmark leading-[0.88] text-sage-950 whitespace-nowrap ${step === 1 ? 'text-[54px] min-[390px]:text-[60px] tracking-[-0.025em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
+            <p className={`${step === 1 ? 'mt-2 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.08em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
               {step === 1 ? (
                 <><span>Massage,</span><span>Fitness</span><span>&amp;</span><span>Nutrition</span></>
               ) : 'Massage, Fitness & Nutrition'}
@@ -1738,7 +1796,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
             </div>
           )}
         </div>
-        <div className={step === 1 ? 'mt-2.5 text-center' : 'mt-3 pt-3 border-t border-sage-100'}>
+        <div className={step === 1 ? 'mt-4 text-center' : 'mt-3 pt-3 border-t border-sage-100'}>
           {step === 2 && member ? (
             <>
               <p className="text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
@@ -1812,9 +1870,10 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
               })()}
             </>
           ) : (
-            <div className="font-serif text-stone-600">
-              <p className="text-[17px] min-[390px]:text-[18px] font-bold tracking-[0.16em]">流動的身心平衡</p>
-              <p className="mt-1.5 text-[11px] min-[390px]:text-[12px] font-semibold tracking-[0.24em] text-sage-600">專屬線上預約系統</p>
+            <div className="font-sans text-stone-700">
+              <div className="mx-auto mb-3 h-px w-10 bg-sage-300" />
+              <p className="text-[18px] min-[390px]:text-[20px] font-extrabold tracking-[0.12em]">流動的身心平衡</p>
+              <p className="mt-2 text-[12px] min-[390px]:text-[13px] font-semibold tracking-[0.18em] text-sage-600">專屬線上預約系統</p>
             </div>
           )}
         </div>
@@ -1953,84 +2012,117 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                 
                 {/* STEP 1: LOGIN & REGISTRATION */}
                 {step === 1 && (
-                  <div className="max-w-md mx-auto bg-sage-50/50 p-6 sm:p-10 rounded-3xl shadow-sm border border-sage-100/80 my-4">
+                  <div className="max-w-md mx-auto overflow-hidden bg-white rounded-[28px] shadow-[0_18px_55px_-28px_rgba(54,79,65,0.38)] border border-sage-100/90 my-4">
                     {loginType === 'member' ? (
-                      <>
-                        <h2 className="text-xl font-bold text-sage-900 mb-6 sm:mb-8 text-center flex items-center justify-center gap-2">
-                          <User className="w-5 h-5 text-sage-500" /> 會員登入 / 註冊
-                        </h2>
+                      <div className="p-6 sm:p-9">
+                        <div className="mb-8 pt-1 text-center">
+                          <h2 className="text-[30px] leading-tight font-black tracking-[0.08em] text-sage-950">{isRegistering ? '會員註冊' : '會員登入'}</h2>
+                          <p className="mt-2 text-[13px] font-medium tracking-[0.04em] text-stone-500">{isRegistering ? '完成基本資料，即可開始預約服務' : '登入後即可管理您的專屬預約'}</p>
+                        </div>
                         
                         <div className="space-y-5">
-                          <div>
-                            <label className="block text-sm font-medium text-stone-600 mb-1.5">請輸入手機號碼 (必填)</label>
+                          {!isRegistering && <div>
+                            <label className="mb-2 block text-[15px] font-bold text-stone-700">手機號碼</label>
                             <div className="relative">
                               <Phone className="absolute left-3.5 top-3.5 h-5 w-5 text-sage-400" />
                               <input 
                                 type="tel" 
+                                inputMode="numeric"
+                                autoComplete="tel"
+                                maxLength={10}
                                 value={phone} 
-                                onChange={e => setPhone(e.target.value)}
-                                disabled={isRegistering}
-                                className={`w-full pl-11 pr-4 py-3.5 border rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base transition ${
-                                  isRegistering ? 'bg-sage-100 text-stone-400 border-sage-200 cursor-not-allowed' : 'bg-white border-sage-200'
+                                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                disabled={isRegistering && !isLineProfileRegistration}
+                                className={`w-full pl-11 pr-4 py-3.5 border rounded-2xl focus:ring-2 focus:ring-sage-200 focus:border-sage-500 outline-none text-base transition ${
+                                  isRegistering && !isLineProfileRegistration ? 'bg-sage-100 text-stone-400 border-sage-200 cursor-not-allowed' : 'bg-white border-sage-200'
                                 }`}
-                                placeholder="如：0912345678"
+                                placeholder="0912345678"
                               />
                             </div>
 
                             {/* Removed redundant staff login tip box as login flows are separated initially */}
-                          </div>
+                          </div>}
 
                           {isRegistering && (
-                            <div className="space-y-4 pt-4 border-t border-sage-200/60 animate-in fade-in slide-in-from-top-4 duration-300">
-                              <div className="flex justify-between items-center">
-                                <p className="text-xs sm:text-sm text-sage-600 font-medium">✨ 歡迎新朋友！請填寫基本資料註冊</p>
-                                <button onClick={() => setIsRegistering(false)} className="text-xs text-sage-500 hover:text-sage-700 underline font-medium">修改手機</button>
+                            <div className="space-y-4 pt-5 border-t border-sage-100 animate-in fade-in slide-in-from-top-4 duration-300">
+                              <div className="rounded-2xl border border-sage-200/80 bg-gradient-to-br from-sage-50 to-stone-50 p-4">
+                                <div className="flex items-start gap-3">
+                                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-sage-700 shadow-sm"><CheckCircle2 className="h-4.5 w-4.5" /></span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-black text-sage-950">{isLineProfileRegistration ? '歡迎加入 ZEN FLOW' : '建立您的會員資料'}</p>
+                                    <p className="mt-1 text-xs leading-relaxed text-stone-500">{isLineProfileRegistration ? '只需第一次加入會員時填寫，之後即可用 LINE 登入預約服務。完成預約時我們會傳送 LINE 通知，並於預約前一天致電提醒您，謝謝！' : '只需第一次加入會員時填寫，之後即可用 LINE 登入預約服務。完成預約時我們會傳送 LINE 通知，並於預約前一天致電提醒您，謝謝！'}</p>
+                                  </div>
+                                  {!isLineProfileRegistration && <button onClick={() => setIsRegistering(false)} className="shrink-0 text-xs font-bold text-sage-700 underline decoration-sage-300 underline-offset-4 hover:text-sage-900">修改</button>}
+                                </div>
                               </div>
                               
                               <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1">您的真實姓名</label>
+                                <label className="block text-sm font-bold text-stone-700 mb-2">真實姓名</label>
                                 <input 
                                   type="text" 
+                                  inputMode="text"
+                                  autoComplete="name"
+                                  maxLength={4}
                                   value={name} 
-                                  onChange={e => setName(e.target.value)} 
-                                  className="w-full px-4 py-3 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base" 
-                                  placeholder="請輸入姓名"
+                                  onChange={e => setName(Array.from(e.target.value.replace(/[^\u3400-\u4DBF\u4E00-\u9FFF]/gu, '')).slice(0, 4).join(''))} 
+                                  className="w-full px-4 py-3 bg-white border border-sage-200 rounded-2xl focus:ring-2 focus:ring-sage-200 focus:border-sage-500 outline-none text-base" 
+                                  placeholder="例如：陳小美"
                                 />
+                                <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-stone-400"><CheckCircle2 className="h-3.5 w-3.5 text-sage-500" />請填寫 1–4 個繁體中文字</p>
                               </div>
 
                               <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1">生日</label>
-                                <div className="relative w-full cursor-pointer">
-                                  <input 
-                                    type="date" 
-                                    value={birthday} 
-                                    onChange={e => setBirthday(e.target.value)} 
-                                    onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                                    style={{ colorScheme: 'light' }}
+                                <label className="block text-sm font-bold text-stone-700 mb-2">手機號碼</label>
+                                <div className="relative">
+                                  <input
+                                    type="tel"
+                                    inputMode="numeric"
+                                    autoComplete="tel"
+                                    maxLength={10}
+                                    value={phone}
+                                    onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                    disabled={!isLineProfileRegistration}
+                                    className={`w-full px-4 py-3 border rounded-2xl outline-none text-base transition ${
+                                      isLineProfileRegistration
+                                        ? 'bg-white border-sage-200 focus:ring-2 focus:ring-sage-200 focus:border-sage-500'
+                                        : 'bg-stone-50 text-stone-600 border-stone-200'
+                                    }`}
+                                    placeholder="0912345678"
                                   />
-                                  <div className="w-full px-4 py-3 bg-white border border-sage-200 rounded-xl text-stone-800 transition flex items-center justify-between text-base">
-                                    <span className={birthday ? "font-sans font-medium" : "text-stone-400"}>{birthday ? birthday.replace(/-/g, '/') : '年 / 月 / 日'}</span>
-                                    <CalendarIcon className="w-5 h-5 text-sage-400" />
-                                  </div>
                                 </div>
+                                <p className="mt-1.5 text-xs font-medium text-stone-400">請填寫可接聽預約提醒的台灣手機號碼</p>
                               </div>
 
                               <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1">LINE ID (必填)</label>
-                                <input 
-                                  type="text" 
-                                  value={lineId} 
-                                  onChange={e => setLineId(e.target.value)} 
-                                  className="w-full px-4 py-3 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base" 
-                                  placeholder="請輸入LINE ID以便客服與您確認預約" 
-                                />
+                                <label className="block text-sm font-bold text-stone-700 mb-2">生日</label>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="bday"
+                                    maxLength={10}
+                                    value={birthday.replace(/-/g, '/')}
+                                    onChange={e => {
+                                      const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                                      const formatted = digits.length <= 4
+                                        ? digits
+                                        : digits.length <= 6
+                                          ? `${digits.slice(0, 4)}/${digits.slice(4)}`
+                                          : `${digits.slice(0, 4)}/${digits.slice(4, 6)}/${digits.slice(6)}`;
+                                      setBirthday(formatted);
+                                    }}
+                                    className="w-full px-4 py-3 pr-11 bg-white border border-sage-200 rounded-2xl text-stone-800 focus:ring-2 focus:ring-sage-200 focus:border-sage-500 outline-none transition text-base"
+                                    placeholder="西元年/月/日，例如 1990/05/20"
+                                  />
+                                  <CalendarIcon className="pointer-events-none absolute right-4 top-3.5 h-5 w-5 text-sage-400" />
+                                </div>
+                                <p className="mt-1.5 text-xs font-medium text-stone-400">請輸入西元生日，共 8 碼數字</p>
                               </div>
 
                               <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1.5">性別</label>
-                                <div className="flex gap-6">
-                                  <label className="flex items-center cursor-pointer py-1">
+                                <label className="block text-sm font-bold text-stone-700 mb-2">性別</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <label className={`flex items-center justify-center cursor-pointer rounded-2xl border px-4 py-3 transition ${gender === '男' ? 'border-sage-600 bg-sage-50 text-sage-900' : 'border-stone-200 bg-white text-stone-500'}`}>
                                     <input 
                                       type="radio" 
                                       value="男" 
@@ -2040,7 +2132,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                                     />
                                     <span className="text-stone-700 text-base font-medium">男性</span>
                                   </label>
-                                  <label className="flex items-center cursor-pointer py-1">
+                                  <label className={`flex items-center justify-center cursor-pointer rounded-2xl border px-4 py-3 transition ${gender === '女' ? 'border-sage-600 bg-sage-50 text-sage-900' : 'border-stone-200 bg-white text-stone-500'}`}>
                                     <input 
                                       type="radio" 
                                       value="女" 
@@ -2053,9 +2145,14 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                                 </div>
                               </div>
 
+                              <div className="flex items-start gap-2.5 rounded-2xl bg-stone-50 px-3.5 py-3 text-xs leading-relaxed text-stone-500">
+                                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-sage-600" />
+                                <p>請填寫可聯繫的真實資料，僅用於會員識別、預約確認與到店提醒。</p>
+                              </div>
+
                               <button 
                                 onClick={handleRegister} 
-                                className="w-full py-4 bg-sage-800 text-white rounded-xl font-bold hover:bg-sage-700 transition duration-200 mt-2 text-base shadow-sm"
+                                className="w-full py-4 bg-sage-800 text-white rounded-2xl font-black hover:bg-sage-700 transition duration-200 mt-2 text-base shadow-lg shadow-sage-200"
                               >
                                 完成註冊並繼續預約
                               </button>
@@ -2067,16 +2164,16 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                               <button
                                 type="button"
                                 onClick={() => window.location.assign('/api/auth/line/start?returnTo=/')}
-                                className="w-full py-4 bg-[#06C755] text-white rounded-xl hover:bg-[#05b74d] transition duration-200 flex items-center justify-center font-black text-base shadow-sm"
+                                className="w-full py-4 bg-[#06C755] text-white rounded-2xl hover:bg-[#05b74d] transition duration-200 flex items-center justify-center font-black text-base shadow-lg shadow-emerald-100"
                               >
-                                使用 LINE 快捷登入
+                                使用 LINE 快速登入
                               </button>
                               <div className="flex items-center gap-3 text-xs font-bold text-stone-400" aria-hidden="true">
                                 <span className="h-px flex-1 bg-stone-200" />或使用手機號碼<span className="h-px flex-1 bg-stone-200" />
                               </div>
                               <button 
                                 onClick={handleLogin} 
-                                className="w-full py-4 bg-sage-800 text-white rounded-xl hover:bg-sage-700 transition duration-200 mt-2 flex items-center justify-center font-bold text-base shadow-sm"
+                                className="w-full py-4 bg-sage-800 text-white rounded-2xl hover:bg-sage-700 transition duration-200 mt-2 flex items-center justify-center font-bold text-base shadow-sm"
                               >
                                 下一步 <ChevronRight className="w-5 h-5 ml-1" />
                               </button>
@@ -2094,7 +2191,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                             </div>
                           )}
                         </div>
-                      </>
+                      </div>
                     ) : (
                       <form onSubmit={handleStaffLogin} autoComplete="on" className="space-y-5 animate-in fade-in duration-200">
                         <h2 className="staff-login-title text-[17px] sm:text-xl font-bold text-sage-900 mb-6 text-center flex items-center justify-center gap-2 font-sans leading-tight">
