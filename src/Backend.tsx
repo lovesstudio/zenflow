@@ -4179,7 +4179,7 @@ export default function Backend() {
           </h2>
           {!isAdmin && (
             <p className="mt-0.5 text-base md:text-lg leading-[1.55] font-bold text-stone-500">
-              歡迎回來!! 願今天的每一步，都踏實且不悔!! 讓我們一起把握當下，逐夢而行!!
+              歡迎回來!! 願今天的每一步都踏實且充實!! 讓我們一起把握當下，逐夢而行!!
             </p>
           )}
         </div>
