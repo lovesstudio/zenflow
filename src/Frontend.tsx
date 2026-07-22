@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, COURSES, Member, OrderItem, Order, calculateDiscount, ALL_TIME_SLOTS, isSlotAvailable, isDayAvailable, Gender, TherapistPreference, timeToMins, minsToTime, getDiscountStatus, sortOrderItems, TherapistAvailability, getSlotStatus, SlotStatus, isTimeRangeCovered, getDetailedSlotStatus, Promotion } from './store';
-import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X, ChevronLeft, ChevronDown, LogOut, ShieldAlert, Award, Star, Compass, MapPin, Smartphone, Edit2 } from 'lucide-react';
+import { User, Phone, Calendar as CalendarIcon, Clock, Plus, Trash2, CheckCircle2, ChevronRight, X, ChevronLeft, ChevronDown, LogOut, ShieldAlert, Award, Star, Compass, MapPin, Smartphone, Edit2, MessageCircle } from 'lucide-react';
 
 const PAYMENT_COMPLETION_MESSAGE = '感謝您的預定，我們已為您鎖定專屬時段。\n\n線上預付限定的「15分鐘加值服務（價值 $300 元）」亦已準備就緒。\n\n當天體驗結束後，您可以直接帶著舒暢的身心優雅離開，期待與您相見！';
 const ONSITE_PAYMENT_COMPLETION_MESSAGE = '感謝您的預定，我們已為您鎖定專屬時段。\n\n期待與您相見！';
@@ -420,10 +420,117 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   const [modalPhoneError, setModalPhoneError] = useState('');
   const [isSavingPhone, setIsSavingPhone] = useState(false);
 
+  // First-time Profile Completion Modal
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileNameInput, setProfileNameInput] = useState('');
+  const [profilePhoneInput, setProfilePhoneInput] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
   const isUnboundPhone = (phoneStr?: string) => {
     if (!phoneStr) return true;
     const p = phoneStr.trim();
     return p.startsWith('line_') || p.length > 12;
+  };
+
+  const isProfileIncomplete = (m?: Member | null) => {
+    if (!m) return false;
+    const hasBoundPhone = m.id && /^09\d{8}$/.test(m.id.trim());
+    const hasValidName = m.name && m.name.trim() !== '' && !m.name.startsWith('LINE用戶') && !m.name.startsWith('line_');
+    return !hasBoundPhone || !hasValidName;
+  };
+
+  const handleSaveProfileCompletion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!member) return;
+
+    const trimmedName = profileNameInput.trim();
+    const trimmedPhone = profilePhoneInput.trim();
+
+    if (!trimmedName) {
+      setProfileError('請輸入您的真實姓名');
+      return;
+    }
+
+    if (!/^09\d{8}$/.test(trimmedPhone)) {
+      setProfileError('請輸入正確的 10 碼手機號碼（例：0912345678）');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      // Sync to Cloudflare KV worker
+      try {
+        await fetch('/api/user/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: trimmedName, phone: trimmedPhone })
+        });
+      } catch (apiErr) {
+        console.warn('KV API sync skipped or failed', apiErr);
+      }
+
+      const oldId = member.id;
+      const newPhone = trimmedPhone;
+
+      const allMembers = db.getMembers();
+      const existingMember = allMembers.find(m => m.id === newPhone && m.id !== oldId);
+
+      let nextMember: Member;
+
+      if (existingMember) {
+        nextMember = {
+          ...existingMember,
+          name: trimmedName,
+          lineUserId: member.lineUserId || existingMember.lineUserId,
+          lineId: member.lineId || existingMember.lineId,
+        };
+        db.saveMember(nextMember);
+      } else {
+        nextMember = {
+          ...member,
+          id: newPhone,
+          name: trimmedName,
+        };
+
+        db.updateMemberInfo(
+          oldId,
+          trimmedName,
+          member.gender,
+          member.birthday,
+          newPhone,
+          member.level,
+          member.lineId,
+          member.referredBy,
+          member.referredMonth,
+          member.primaryTherapist,
+          member.membershipStartDate,
+          member.membershipEndDate,
+          member.role,
+          member.password,
+          member.therapistName,
+          member.roles,
+          member.memberLevel,
+          member.selectedIdentities,
+          member.fitnessPlan,
+          member.primaryCoach,
+          member.secondaryCoach
+        );
+      }
+
+      setMember(nextMember);
+      setPhone(newPhone);
+      localStorage.setItem('zf_login_phone', newPhone);
+      window.dispatchEvent(new Event('zf-auth-change'));
+
+      setShowProfileModal(false);
+      setProfileError('');
+    } catch (error) {
+      console.error('Failed to save profile completion:', error);
+      setProfileError('儲存資料失敗，請重試');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const openPhoneModal = () => {
@@ -610,6 +717,22 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
   // Booking Flow State
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [frontendTab, setFrontendTab] = useState<'venue' | 'booking' | 'upcoming' | 'history' | 'fitness'>('booking');
+
+  useEffect(() => {
+    if (member && step === 2) {
+      if (isProfileIncomplete(member)) {
+        setShowProfileModal(true);
+        setProfileNameInput(
+          member.name && !member.name.startsWith('LINE用戶') && !member.name.startsWith('line_')
+            ? member.name
+            : ''
+        );
+        setProfilePhoneInput(
+          member.id && /^09\d{8}$/.test(member.id.trim()) ? member.id.trim() : ''
+        );
+      }
+    }
+  }, [member, step]);
 
   // Venue Booking State
   const [venueDate, setVenueDate] = useState('');
@@ -1906,6 +2029,66 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
           </div>
         </div>
       )}
+
+      {showProfileModal && member && (
+        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md overflow-hidden rounded-3xl border border-stone-100 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="bg-sage-900 px-6 py-6 text-white text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-sage-800/80 flex items-center justify-center mb-3 shadow-inner">
+                <User className="w-6 h-6 text-sage-200" />
+              </div>
+              <h3 className="text-xl font-black text-white leading-snug">歡迎首次蒞臨 ZEN FLOW！</h3>
+              <p className="text-xs text-sage-200/90 mt-1.5 font-medium">請完善您的預約基本資料，以利為您安排貼心服務</p>
+            </div>
+
+            <form onSubmit={handleSaveProfileCompletion} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">您的真實姓名 <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  value={profileNameInput}
+                  onChange={e => {
+                    setProfileNameInput(e.target.value);
+                    setProfileError('');
+                  }}
+                  placeholder="請輸入姓名 (例如：王小明)"
+                  className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-bold text-stone-900 focus:bg-white focus:border-sage-500 focus:outline-none focus:ring-1 focus:ring-sage-500 transition"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">手機號碼 (10 碼) <span className="text-rose-500">*</span></label>
+                <input
+                  type="tel"
+                  value={profilePhoneInput}
+                  onChange={e => {
+                    setProfilePhoneInput(e.target.value);
+                    setProfileError('');
+                  }}
+                  maxLength={10}
+                  placeholder="請輸入 10 碼手機號碼 (例如：0912345678)"
+                  className="w-full rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-bold text-stone-900 focus:bg-white focus:border-sage-500 focus:outline-none focus:ring-1 focus:ring-sage-500 transition font-sans"
+                />
+              </div>
+
+              {profileError && (
+                <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2.5 rounded-xl flex items-center gap-1.5 animate-in fade-in duration-150">
+                  <span className="shrink-0">⚠️</span> {profileError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSavingProfile}
+                className="w-full py-4 rounded-xl bg-sage-800 hover:bg-sage-900 text-white font-black text-base transition shadow-md disabled:opacity-50 mt-2 cursor-pointer active:scale-[0.99]"
+              >
+                {isSavingProfile ? '資料儲存中...' : '完成資料並開始預約'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
       
       {/* HEADER FOR MOBILE / TABLET */}
       <div className={`lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
@@ -2160,173 +2343,42 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                   <div className="max-w-md mx-auto bg-sage-50/50 p-6 sm:p-10 rounded-3xl shadow-sm border border-sage-100/80 my-4">
                     {loginType === 'member' ? (
                       <>
-                        <h2 className="text-xl font-bold text-sage-900 mb-6 sm:mb-8 text-center flex items-center justify-center gap-2">
-                          <User className="w-5 h-5 text-sage-500" /> 會員登入 / 註冊
-                        </h2>
+                        <div className="text-center mb-6 sm:mb-8">
+                          <h2 className="text-xl sm:text-2xl font-black text-sage-900 mb-2 flex items-center justify-center gap-2">
+                            <User className="w-6 h-6 text-sage-600" /> 會員預約登入
+                          </h2>
+                          <p className="text-xs sm:text-sm font-medium text-stone-500">
+                            歡迎使用 ZEN FLOW 專屬線上預約系統
+                          </p>
+                        </div>
                         
-                        <div className="space-y-5">
-                          <div>
-                            <label className="block text-sm font-medium text-stone-600 mb-1.5">請輸入手機號碼 (必填)</label>
-                            <div className="relative">
-                              <Phone className="absolute left-3.5 top-3.5 h-5 w-5 text-sage-400" />
-                              <input 
-                                type="tel" 
-                                value={phone} 
-                                onChange={e => setPhone(e.target.value)}
-                                disabled={isRegistering}
-                                className={`w-full pl-11 pr-4 py-3.5 border rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base transition ${
-                                  isRegistering ? 'bg-sage-100 text-stone-400 border-sage-200 cursor-not-allowed' : 'bg-white border-sage-200'
-                                }`}
-                                placeholder="如：0912345678"
-                              />
-                            </div>
+                        <div className="space-y-6">
+                          <button
+                            type="button"
+                            onClick={() => window.location.assign('/api/auth/line/start?returnTo=/')}
+                            className="w-full py-4 bg-[#06C755] hover:bg-[#05b74d] text-white rounded-2xl transition duration-200 flex items-center justify-center gap-2.5 font-black text-base sm:text-lg shadow-md active:scale-[0.99] cursor-pointer"
+                          >
+                            <MessageCircle className="w-6 h-6 fill-current shrink-0" />
+                            使用 LINE 快捷登入
+                          </button>
 
-                            {/* Removed redundant staff login tip box as login flows are separated initially */}
+                          <p className="text-xs text-center text-stone-400 leading-relaxed font-medium px-2">
+                            點擊登入即表示您同意 ZEN FLOW 之預約服務條款與店內須知
+                          </p>
+
+                          <div className="pt-4 border-t border-sage-200/60">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLoginType('staff');
+                                setStaffPhone('');
+                                setStaffPassword('');
+                              }}
+                              className="w-full text-center text-xs sm:text-sm text-sage-700 hover:text-sage-900 font-bold underline underline-offset-4 transition font-sans cursor-pointer"
+                            >
+                              店內人員由此登入
+                            </button>
                           </div>
-
-                          {isRegistering && (
-                            <div className="space-y-4 pt-4 border-t border-sage-200/60 animate-in fade-in slide-in-from-top-4 duration-300">
-                              <div className="flex justify-between items-center">
-                                <p className="text-xs sm:text-sm text-sage-600 font-medium">✨ 歡迎新朋友！請填寫基本資料註冊</p>
-                                <button onClick={() => setIsRegistering(false)} className="text-xs text-sage-500 hover:text-sage-700 underline font-medium">修改手機</button>
-                              </div>
-                              
-                              <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1">您的真實姓名</label>
-                                <input 
-                                  type="text" 
-                                  value={name} 
-                                  onChange={e => setName(e.target.value)} 
-                                  className="w-full px-4 py-3 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base" 
-                                  placeholder="請輸入姓名"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1">生日</label>
-                                <div className="relative flex items-center w-full bg-white border border-sage-200 rounded-xl focus-within:ring-2 focus-within:ring-sage-400 focus-within:border-sage-500 overflow-hidden transition">
-                                  <input 
-                                    type="text" 
-                                    value={birthdayText} 
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      setBirthdayText(val);
-                                      const parsed = parseBirthdayString(val);
-                                      if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
-                                        setBirthday(parsed);
-                                      } else {
-                                        setBirthday(val);
-                                      }
-                                    }} 
-                                    onBlur={() => {
-                                      const parsed = parseBirthdayString(birthdayText);
-                                      if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
-                                        setBirthday(parsed);
-                                        setBirthdayText(parsed.replace(/-/g, '/'));
-                                      }
-                                    }}
-                                    placeholder="請輸入年月日 (例: 1990/05/20) 或點選日曆" 
-                                    className="w-full px-4 py-3 bg-transparent outline-none text-base font-sans font-medium text-stone-800 placeholder:text-stone-400"
-                                  />
-                                  <div className="relative shrink-0 pr-3 flex items-center justify-center cursor-pointer">
-                                    <input 
-                                      type="date" 
-                                      value={birthday && /^\d{4}-\d{2}-\d{2}$/.test(birthday) ? birthday : ''} 
-                                      onChange={e => {
-                                        const val = e.target.value;
-                                        if (val) {
-                                          setBirthday(val);
-                                          setBirthdayText(val.replace(/-/g, '/'));
-                                        }
-                                      }} 
-                                      onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
-                                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                                      style={{ colorScheme: 'light' }}
-                                    />
-                                    <button type="button" className="p-1.5 rounded-lg text-sage-500 hover:text-sage-700 hover:bg-sage-50 transition" title="開啟日曆選單">
-                                      <CalendarIcon className="w-5 h-5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1">LINE ID (必填)</label>
-                                <input 
-                                  type="text" 
-                                  value={lineId} 
-                                  onChange={e => setLineId(e.target.value)} 
-                                  className="w-full px-4 py-3 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base" 
-                                  placeholder="請輸入LINE ID以便客服與您確認預約" 
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-sm font-medium text-stone-600 mb-1.5">性別</label>
-                                <div className="flex gap-6">
-                                  <label className="flex items-center cursor-pointer py-1">
-                                    <input 
-                                      type="radio" 
-                                      value="男" 
-                                      checked={gender === '男'} 
-                                      onChange={() => setGender('男')} 
-                                      className="mr-2 w-5 h-5 accent-sage-800" 
-                                    />
-                                    <span className="text-stone-700 text-base font-medium">男性</span>
-                                  </label>
-                                  <label className="flex items-center cursor-pointer py-1">
-                                    <input 
-                                      type="radio" 
-                                      value="女" 
-                                      checked={gender === '女'} 
-                                      onChange={() => setGender('女')} 
-                                      className="mr-2 w-5 h-5 accent-sage-800" 
-                                    />
-                                    <span className="text-stone-700 text-base font-medium">女性</span>
-                                  </label>
-                                </div>
-                              </div>
-
-                              <button 
-                                onClick={handleRegister} 
-                                className="w-full py-4 bg-sage-800 text-white rounded-xl font-bold hover:bg-sage-700 transition duration-200 mt-2 text-base shadow-sm"
-                              >
-                                完成註冊並繼續預約
-                              </button>
-                            </div>
-                          )}
-
-                          {!isRegistering && (
-                            <div className="space-y-4">
-                              <button
-                                type="button"
-                                onClick={() => window.location.assign('/api/auth/line/start?returnTo=/')}
-                                className="w-full py-4 bg-[#06C755] text-white rounded-xl hover:bg-[#05b74d] transition duration-200 flex items-center justify-center font-black text-base shadow-sm"
-                              >
-                                使用 LINE 快捷登入
-                              </button>
-                              <div className="flex items-center gap-3 text-xs font-bold text-stone-400" aria-hidden="true">
-                                <span className="h-px flex-1 bg-stone-200" />或使用手機號碼<span className="h-px flex-1 bg-stone-200" />
-                              </div>
-                              <button 
-                                onClick={handleLogin} 
-                                className="w-full py-4 bg-sage-800 text-white rounded-xl hover:bg-sage-700 transition duration-200 mt-2 flex items-center justify-center font-bold text-base shadow-sm"
-                              >
-                                下一步 <ChevronRight className="w-5 h-5 ml-1" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setLoginType('staff');
-                                  setStaffPhone('');
-                                  setStaffPassword('');
-                                }}
-                                className="w-full text-center text-xs sm:text-sm text-sage-700 hover:text-sage-900 font-bold underline underline-offset-4 transition font-sans"
-                              >
-                                店內人員由此登入
-                              </button>
-                            </div>
-                          )}
                         </div>
                       </>
                     ) : (
