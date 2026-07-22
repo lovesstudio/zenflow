@@ -1,3 +1,4 @@
+// EZ Pages release: 2026-07-22-line-profile-fix-v2
 interface Fetcher {
   fetch(request: Request): Promise<Response>;
 }
