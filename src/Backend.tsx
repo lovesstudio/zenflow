@@ -1463,7 +1463,7 @@ export default function Backend() {
       <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6 md:space-y-10">
         {tab === 'calendar' && (
           <div className="space-y-8 animate-fadeIn">
-              <div className={isAdmin ? "bg-white rounded-3xl border border-sage-100 shadow-sm p-4 md:p-8 space-y-8" : "space-y-8"}>
+              <div className={isAdmin ? "bg-white rounded-xl border border-sage-100 shadow-sm p-4 md:p-8 space-y-8" : "space-y-8"}>
                 {!isAdmin ? (
                   <div className="space-y-6">
                     <div>
@@ -1677,7 +1677,7 @@ export default function Backend() {
                                 key={item.id}
                                 type="button"
                                 onClick={() => setAdminSelectedCategory(prev => prev === item.id ? '' : item.id)}
-                                className={`min-w-0 min-h-[76px] grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-2xl border px-3 py-2.5 text-center transition-all duration-200 font-bold cursor-pointer shadow-sm md:min-h-[82px] md:px-4 ${
+                                className={`min-w-0 min-h-[76px] grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl border px-3 py-2.5 text-center transition-all duration-200 font-bold cursor-pointer shadow-sm md:min-h-[82px] md:px-4 ${
                                   isSelected
                                     ? item.activeColor + ' shadow-sm'
                                     : `${item.bgColor} ${item.textColor} ${item.borderColor}`
@@ -2822,13 +2822,8 @@ export default function Backend() {
            </div>
          )}
  
-         {tab === 'promotions' && isAdmin && (
+        {tab === 'promotions' && isAdmin && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div>
-              <h2 className="backend-page-title">優惠活動管理</h2>
-              <p className="mt-1 text-sm font-bold leading-6 text-stone-500 md:text-base">建立優惠代碼後，按摩與健身預約結帳會自動驗證並計算折扣。</p>
-            </div>
-
             <div className="grid gap-6 xl:grid-cols-[minmax(360px,0.82fr)_minmax(0,1.18fr)]">
               <section className="h-fit rounded-2xl border border-sage-100 bg-white p-4 shadow-sm md:p-6">
                 <div className="mb-5 flex items-center justify-between gap-3">
@@ -2840,25 +2835,29 @@ export default function Backend() {
                     <label className="space-y-1.5 text-sm font-black text-stone-700">優惠代碼
                       <input value={promotionForm.code} onChange={e => setPromotionForm({...promotionForm, code: e.target.value.toUpperCase().replace(/\s/g, '')})} placeholder="例如 ZEN300" className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-black uppercase tracking-wide outline-none focus:border-sage-500" />
                     </label>
-                    <label className="space-y-1.5 text-sm font-black text-stone-700">活動名稱
-                      <input value={promotionForm.name} onChange={e => setPromotionForm({...promotionForm, name: e.target.value})} placeholder="例如 十週年感謝優惠" className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
+                    <label className="space-y-1.5 text-sm font-black text-stone-700">可用次數
+                      <input type="number" min="0" value={promotionForm.memberUsageLimit} onChange={e => setPromotionForm({...promotionForm, memberUsageLimit: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
+                      <span className="block text-xs font-bold text-stone-400">填寫 0 代表不限制次數。</span>
                     </label>
                   </div>
+                  <label className="block space-y-1.5 text-sm font-black text-stone-700">活動名稱
+                    <input value={promotionForm.name} onChange={e => setPromotionForm({...promotionForm, name: e.target.value})} placeholder="例如 十週年感謝優惠" className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
+                  </label>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-1.5 text-sm font-black text-stone-700">折扣方式
                       <select value={promotionForm.discountType} onChange={e => setPromotionForm({...promotionForm, discountType: e.target.value as 'fixed' | 'percentage'})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500">
                         <option value="fixed">固定金額折抵</option><option value="percentage">百分比折扣</option>
                       </select>
                     </label>
-                    <label className="space-y-1.5 text-sm font-black text-stone-700">{promotionForm.discountType === 'fixed' ? '折抵金額（元）' : '折扣比例（%）'}
-                      <input type="number" min="0" max={promotionForm.discountType === 'percentage' ? 100 : undefined} value={promotionForm.discountValue} onChange={e => setPromotionForm({...promotionForm, discountValue: e.target.value})} placeholder={promotionForm.discountType === 'fixed' ? '300' : '10'} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
-                    </label>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
                     <label className="space-y-1.5 text-sm font-black text-stone-700">適用預約
                       <select value={promotionForm.appliesTo} onChange={e => setPromotionForm({...promotionForm, appliesTo: e.target.value as 'all' | 'massage' | 'fitness'})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500">
                         <option value="all">按摩與健身皆適用</option><option value="massage">僅限按摩預約</option><option value="fitness">僅限健身預約</option>
                       </select>
+                    </label>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="space-y-1.5 text-sm font-black text-stone-700">{promotionForm.discountType === 'fixed' ? '折抵金額（元）' : '折扣比例（%）'}
+                      <input type="number" min="0" max={promotionForm.discountType === 'percentage' ? 100 : undefined} value={promotionForm.discountValue} onChange={e => setPromotionForm({...promotionForm, discountValue: e.target.value})} placeholder={promotionForm.discountType === 'fixed' ? '300' : '10'} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
                     <label className="space-y-1.5 text-sm font-black text-stone-700">最低消費金額
                       <input type="number" min="0" value={promotionForm.minimumSpend} onChange={e => setPromotionForm({...promotionForm, minimumSpend: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
@@ -2872,11 +2871,7 @@ export default function Backend() {
                       <input type="date" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                    <label className="space-y-1.5 text-sm font-black text-stone-700">每位會員可使用次數
-                      <input type="number" min="0" value={promotionForm.memberUsageLimit} onChange={e => setPromotionForm({...promotionForm, memberUsageLimit: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
-                      <span className="block text-xs font-bold text-stone-400">填寫 0 代表不限制次數。</span>
-                    </label>
+                  <div className="flex justify-end">
                     <label className="flex h-11 items-center gap-2 rounded-xl border border-sage-100 bg-sage-50 px-4 text-sm font-black text-sage-900">
                       <input type="checkbox" checked={promotionForm.enabled} onChange={e => setPromotionForm({...promotionForm, enabled: e.target.checked})} className="h-4 w-4 accent-sage-700" />啟用活動
                     </label>
@@ -3342,12 +3337,12 @@ export default function Backend() {
 
                                       return (
                                         <div className="space-y-3">
-                                          <div className="grid grid-cols-[1.2fr_0.8fr_1.2fr] gap-2">
-                                            <div>
+                                          <div className="grid grid-cols-[0.85fr_0.65fr_1.5fr] gap-2">
+                                            <div className="min-w-0">
                                               <label className={labelClass}>姓名</label>
                                               <input type="text" value={editName} onChange={e=>setEditName(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className={fieldClass} />
                                             </div>
-                                            <div>
+                                            <div className="min-w-0">
                                               <label className={labelClass}>性別</label>
                                               <select value={editGender} onChange={e=>{
                                                 const newGen = e.target.value as Gender;
@@ -3358,7 +3353,7 @@ export default function Backend() {
                                                 <option value="女">女</option>
                                               </select>
                                             </div>
-                                            <div>
+                                            <div className="min-w-0">
                                               <label className={labelClass}>生日</label>
                                               <div className="relative flex items-center w-full bg-stone-50 border border-stone-200 rounded-lg focus-within:bg-white focus-within:border-stone-500 transition overflow-hidden">
                                                 <input 
@@ -3412,12 +3407,12 @@ export default function Backend() {
                                             </div>
                                           </div>
 
-                                          <div className="grid grid-cols-2 gap-2">
-                                            <div>
+                                          <div className="grid grid-cols-[0.85fr_1.35fr] gap-2">
+                                            <div className="min-w-0">
                                               <label className={labelClass}>手機號碼</label>
                                               <input type="text" value={editPhone} onChange={e=>setEditPhone(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className={fieldClass} />
                                             </div>
-                                            <div>
+                                            <div className="min-w-0">
                                               <label className={labelClass}>LINE ID</label>
                                               <input type="text" value={editLineId} onChange={e=>setEditLineId(e.target.value)} onBlur={()=>handleInfoSave(m.id)} className={fieldClass} />
                                             </div>
@@ -4164,8 +4159,8 @@ export default function Backend() {
 
   {tab === 'therapist' && (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="pb-2">
-        <div className="min-w-0">
+      <div className="flex min-h-8 items-center">
+        <div className="min-w-0 w-full">
           <h2 className={`${!isAdmin ? 'text-[22px] md:text-3xl leading-8 md:leading-10 font-black text-stone-900 tracking-normal' : 'backend-page-title'}`}>
             {selectedTherapistPortal
               ? (isAdmin ? getStaffPortalTitle(selectedTherapistPortal) : `${selectedTherapistPortal}${getStaffPortalRoleTitle(selectedTherapistPortal)}，${getTimeGreeting()}您好~`)
@@ -5014,5 +5009,3 @@ export default function Backend() {
     </div>
   );
 }
-
-
