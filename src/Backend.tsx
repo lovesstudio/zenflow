@@ -988,7 +988,7 @@ export default function Backend() {
       endDate: promotionForm.endDate,
       minimumSpend: Math.max(0, Math.floor(Number(promotionForm.minimumSpend) || 0)),
       memberUsageLimit: Math.max(0, Math.floor(Number(promotionForm.memberUsageLimit) || 0)),
-      enabled: promotionForm.enabled,
+      enabled: true,
       createdAt: existing?.createdAt || now,
       updatedAt: now
     });
@@ -2832,40 +2832,40 @@ export default function Backend() {
                 </div>
                 <div className="space-y-4">
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">
                       <span className="flex items-center">優惠代碼</span>
                       <input value={promotionForm.code} onChange={e => setPromotionForm({...promotionForm, code: e.target.value.toUpperCase().replace(/\s/g, '')})} placeholder="例如 ZEN300" className="block h-11 w-full min-w-0 box-border rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-black uppercase tracking-wide outline-none focus:border-sage-500" />
                     </label>
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">
                       <span className="flex items-center justify-between gap-1"><span>可用次數</span><span className="whitespace-nowrap text-[10px] font-bold text-stone-400 md:text-xs">0代表無限次</span></span>
                       <input type="number" min="0" value={promotionForm.memberUsageLimit} onChange={e => setPromotionForm({...promotionForm, memberUsageLimit: e.target.value})} className="block h-11 w-full min-w-0 box-border rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
                   </div>
-                  <label className="block space-y-1.5 text-sm font-black text-stone-700">活動名稱
+                  <label className="block space-y-2.5 text-sm font-black text-stone-700">活動名稱
                     <input value={promotionForm.name} onChange={e => setPromotionForm({...promotionForm, name: e.target.value})} placeholder="例如 十週年感謝優惠" className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                   </label>
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">折扣方式
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">折扣方式
                       <select value={promotionForm.discountType} onChange={e => setPromotionForm({...promotionForm, discountType: e.target.value as 'fixed' | 'percentage'})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500">
                         <option value="fixed">固定金額折抵</option><option value="percentage">百分比折扣</option>
                       </select>
                     </label>
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">適用預約
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">適用預約
                       <select value={promotionForm.appliesTo} onChange={e => setPromotionForm({...promotionForm, appliesTo: e.target.value as 'all' | 'massage' | 'fitness'})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500">
                         <option value="all">按摩健身皆可</option><option value="massage">僅限按摩預約</option><option value="fitness">僅限健身預約</option>
                       </select>
                     </label>
                   </div>
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">{promotionForm.discountType === 'fixed' ? '折抵金額（元）' : '折扣比例（%）'}
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">{promotionForm.discountType === 'fixed' ? '折抵金額（元）' : '折扣比例（%）'}
                       <input type="number" min="0" max={promotionForm.discountType === 'percentage' ? 100 : undefined} value={promotionForm.discountValue} onChange={e => setPromotionForm({...promotionForm, discountValue: e.target.value})} placeholder={promotionForm.discountType === 'fixed' ? '300' : '10'} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">最低消費金額
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">最低消費金額
                       <input type="number" min="0" value={promotionForm.minimumSpend} onChange={e => setPromotionForm({...promotionForm, minimumSpend: e.target.value})} className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 font-bold outline-none focus:border-sage-500" />
                     </label>
                   </div>
                   <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-4">
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">開始日期
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">開始日期
                       <span className="relative flex h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-3 focus-within:border-sage-500">
                         <span className="truncate text-[14px] font-black text-stone-700 sm:text-[15px] md:text-base">
                           {promotionForm.startDate ? promotionForm.startDate.replace(/-/g, '/') : '年/月/日'}
@@ -2874,7 +2874,7 @@ export default function Backend() {
                         <input type="date" aria-label="開始日期" value={promotionForm.startDate} onChange={e => setPromotionForm({...promotionForm, startDate: e.target.value})} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
                       </span>
                     </label>
-                    <label className="min-w-0 space-y-1.5 text-sm font-black text-stone-700">結束日期
+                    <label className="min-w-0 space-y-2.5 text-sm font-black text-stone-700">結束日期
                       <span className="relative flex h-11 w-full min-w-0 items-center justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-3 focus-within:border-sage-500">
                         <span className="truncate text-[14px] font-black text-stone-700 sm:text-[15px] md:text-base">
                           {promotionForm.endDate ? promotionForm.endDate.replace(/-/g, '/') : '年/月/日'}
@@ -2882,11 +2882,6 @@ export default function Backend() {
                         <Calendar className="h-4 w-4 shrink-0 text-stone-400" />
                         <input type="date" aria-label="結束日期" value={promotionForm.endDate} onChange={e => setPromotionForm({...promotionForm, endDate: e.target.value})} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
                       </span>
-                    </label>
-                  </div>
-                  <div className="flex justify-end">
-                    <label className="flex h-11 items-center gap-2 rounded-xl border border-sage-100 bg-sage-50 px-4 text-sm font-black text-sage-900">
-                      <input type="checkbox" checked={promotionForm.enabled} onChange={e => setPromotionForm({...promotionForm, enabled: e.target.checked})} className="h-4 w-4 accent-sage-700" />{editingPromotionId ? '啟用此活動' : '建立後立即啟用'}
                     </label>
                   </div>
                   <button type="button" onClick={savePromotion} className="h-12 w-full rounded-xl bg-sage-800 text-base font-black text-white shadow-sm transition hover:bg-sage-700">{editingPromotionId ? '儲存活動變更' : '建立優惠活動'}</button>
@@ -2916,6 +2911,9 @@ export default function Backend() {
                         <div className="flex shrink-0 gap-1.5">
                           <button type="button" onClick={() => editPromotion(promotion)} className="h-10 min-h-10 rounded-lg border border-sage-100 bg-sage-50 px-3 text-sm font-black text-sage-800">編輯</button>
                           <button type="button" onClick={() => { if (window.confirm(`確定刪除「${promotion.name}」嗎？`)) { db.deletePromotion(promotion.id); setPromotions(db.getPromotions()); if (editingPromotionId === promotion.id) resetPromotionForm(); } }} className="h-10 min-h-10 rounded-lg border border-rose-100 bg-rose-50 px-3 text-sm font-black text-rose-700">刪除</button>
+                          <span className="inline-flex h-10 min-h-10 items-center whitespace-nowrap rounded-lg border border-stone-200 bg-stone-50 px-3 text-sm font-black text-stone-700">
+                            可用次數&nbsp;{promotion.memberUsageLimit ? `${promotion.memberUsageLimit}次` : '無限次'}
+                          </span>
                         </div>
                       </div>
                       <div className="mt-4 grid grid-cols-[minmax(0,1.45fr)_minmax(90px,0.75fr)] gap-x-5 gap-y-3 border-t border-stone-100 pt-4 text-sm md:gap-x-8">
@@ -2923,7 +2921,6 @@ export default function Backend() {
                         <div><p className="font-bold text-stone-400">適用服務</p><p className="mt-0.5 font-black text-stone-800">{{all:'按摩健身皆可',massage:'按摩預約',fitness:'健身預約'}[promotion.appliesTo]}</p></div>
                         <div className="min-w-0"><p className="font-bold text-stone-400">活動期間</p><p className="mt-0.5 whitespace-nowrap text-[14px] font-black text-stone-800 sm:text-[15px]">{promotion.startDate.replace(/-/g, '/')}～{promotion.endDate.replace(/-/g, '/')}</p></div>
                         <div><p className="font-bold text-stone-400">最低消費</p><p className="mt-0.5 font-black text-stone-800">{promotion.minimumSpend ? `NT$ ${promotion.minimumSpend.toLocaleString()}` : '無限制'}</p></div>
-                        <div><p className="font-bold text-stone-400">可用次數</p><p className="mt-0.5 font-black text-stone-800">{promotion.memberUsageLimit ? `${promotion.memberUsageLimit} 次` : '無限制'}</p></div>
                       </div>
                     </article>
                   );
