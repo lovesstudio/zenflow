@@ -1782,7 +1782,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       )}
       
       {/* HEADER FOR MOBILE / TABLET */}
-      <div className={`lg:hidden ${step === 1 ? 'bg-gradient-to-b from-white via-sage-50/35 to-transparent px-5 pt-10 pb-7' : 'border-b border-sage-100 bg-white px-3 min-[390px]:px-4 py-4 shadow-sm'}`}>
+      <div className={`lg:hidden ${step === 1 ? `bg-gradient-to-b from-white via-sage-50/35 to-transparent px-5 ${loginType === 'staff' ? 'pt-7 pb-2' : 'pt-10 pb-7'}` : 'border-b border-sage-100 bg-white px-3 min-[390px]:px-4 py-4 shadow-sm'}`}>
         <div className={step === 1 ? 'text-center' : 'grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 min-[390px]:gap-3'}>
           <div className={step === 1 ? 'inline-flex flex-col items-center' : 'min-w-0 h-[62px] flex flex-col justify-between py-0.5'}>
             <h1 className={`zen-flow-wordmark text-sage-950 whitespace-nowrap ${step === 1 ? 'text-[50px] min-[390px]:text-[56px] leading-[0.92] tracking-[-0.035em]' : 'text-[38px] min-[390px]:text-[44px] leading-[0.88]'}`}>ZEN FLOW</h1>
@@ -1886,7 +1886,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:p-6 lg:p-10">
+      <div className={`max-w-7xl mx-auto lg:p-10 ${step === 1 && loginType === 'staff' ? 'px-4 pt-2 pb-6 sm:px-6 sm:pt-3 sm:pb-6' : 'px-4 py-6 sm:p-6'}`}>
         <div className={`grid grid-cols-1 lg:grid-cols-12 items-start ${step === 1 ? 'gap-5 lg:gap-8' : 'gap-8'}`}>
           
           {/* LEFT COLUMN: Store Profile / Vibe Introductions (Responsive desktop side, mobile below) */}
@@ -1905,85 +1905,84 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                   <p className="mt-2 text-[11px] font-bold tracking-[0.18em] text-sage-600">專屬線上預約系統</p>
                 </div>
 
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-[15px] sm:text-base font-bold uppercase tracking-wider text-sage-800 border-b border-sage-100 pb-2.5 flex items-center gap-1.5">
-                      <Compass className="w-4 h-4 text-sage-500" /> 靜謐空間與品牌初衷
-                    </h3>
-                    <div className="text-[14px] sm:text-[15px] text-stone-600 leading-[1.85] font-medium mt-3 space-y-3.5">
-                      <p className="text-[16px] sm:text-[17px] font-black text-sage-900">ZEN FLOW 創立於 2016 年。</p>
+                <div className="brand-story space-y-8">
+                  <section>
+                    <p className="brand-story-eyebrow">OUR STORY</p>
+                    <h3 className="brand-story-heading">靜謐空間與品牌初衷</h3>
+                    <div className="brand-story-copy mt-4 space-y-4">
+                      <p className="brand-story-lead">ZEN FLOW 創立於 2016 年。</p>
                       <p>
-                        十載的光陰淬鍊，讓我們更深信大自然植物與身體自我療癒的力量。我們將<strong className="font-black text-stone-800">西方頂級芳療 SPA 油推</strong>的細緻撫慰，與<strong className="font-black text-stone-800">東方經絡穴道調理</strong>的深層釋放完美融合。
+                        十載的光陰淬鍊，讓我們更深信大自然植物與身體自我療癒的力量。我們將<strong>西方頂級芳療 SPA 油推</strong>的細緻撫慰，與<strong>東方經絡穴道調理</strong>的深層釋放完美融合。
                       </p>
                       <p>
-                        為了提供更精準的照護，我們導入<strong className="font-black text-stone-800">科學 InBody 身體組成分析</strong>，為您量身規劃結合<strong className="font-black text-stone-800">運動按摩修復</strong>、<strong className="font-black text-stone-800">個人化健身運動</strong>與<strong className="font-black text-stone-800">日常營養調理</strong>的整合方案。從肌肉的深層釋放、體態的鍛鍊到內在的營養滋養，ZEN FLOW 陪伴您在靜謐的空間中，找回最純粹的身心和諧。
+                        為了提供更精準的照護，我們導入<strong>科學 InBody 身體組成分析</strong>，為您量身規劃結合<strong>運動按摩修復</strong>、<strong>個人化健身運動</strong>與<strong>日常營養調理</strong>的整合方案。從肌肉的深層釋放、體態的鍛鍊到內在的營養滋養，ZEN FLOW 陪伴您在靜謐的空間中，找回最純粹的身心和諧。
                       </p>
                     </div>
-                  </div>
+                  </section>
 
-                  <div>
-                    <h3 className="text-[15px] sm:text-base font-bold uppercase tracking-wider text-sage-800 border-b border-sage-100 pb-2.5 flex items-center gap-1.5">
-                      <Star className="w-4 h-4 text-sage-500" /> 店內奢華禮遇與服務
-                    </h3>
-                    <ul className="text-[16px] sm:text-[17px] text-stone-700 space-y-5 font-medium leading-[1.75] mt-3.5">
-                      <li className="flex items-start gap-2">
-                        <span className="text-sage-500 mt-0.5">✦</span>
-                        <span>
-                          <strong>法國 Florihana芳療家｜頂級有機芳療護理</strong>
-                          <span className="block text-[15px] sm:text-base leading-[1.8] text-stone-600 mt-2">我們全店採用法國頂級有機品牌 Florihana 精油。每一滴，都凝聚了南法高原最純淨的植物能量，透過芳療師細緻溫熱的手技，溫柔撫平身心每一處緊繃，帶來無可比擬的深層釋放。</span>
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-sage-500 mt-0.5">✦</span>
-                        <span>
-                          <strong>專業經絡與深層運動按摩｜深度解構筋膜緊繃，徹底釋放關節壓力，重啟身體無壓的輕盈流動</strong>
-                          <span className="block text-[15px] sm:text-base leading-[1.8] text-stone-600 mt-2">直擊酸痛核心！結合專業東西方按摩技法，深層瓦解緊繃肌群，神救援被壓力與疲勞積壓的關節，還原身體久違的鬆彈與自由。</span>
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-sage-500 mt-0.5">✦</span>
-                        <span>
-                          <strong>醫學級 InBody 數據解密｜精準透視身體組成，為您精確定義健康與體態的黃金比例。</strong>
-                        </span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-sage-500 mt-0.5">✦</span>
-                        <span>
-                          <strong>尊榮專屬款待｜迎賓花草茶、獨立淋浴空間、課後頂級優質蛋白飲</strong>
-                          <span className="block text-[15px] sm:text-base leading-[1.8] text-stone-600 mt-2">從一杯暖心的有機迎賓茶開始，到獨立淋浴房的放鬆沐浴，最後以精準修復的優質蛋白飲完美收尾。全流程專屬款待，只為成就最好的您。</span>
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="pt-5 border-t border-sage-100 space-y-3.5 text-[14px] sm:text-[15px] leading-relaxed text-stone-600 font-medium">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-sage-500" />
-                      <span><strong>營業時間：</strong>每日 10:00 ~ 22:00</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-sage-500 shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1 leading-relaxed">
-                        <div className="font-bold text-[14px] sm:text-[15px]">店鋪地址：</div>
-                        <a
-                          href="https://www.google.com/maps/search/?api=1&query=新北市板橋區民生路三段30-1號1樓"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 hover:text-sage-700 hover:underline transition duration-150 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-stone-600 min-w-0"
-                        >
-                          <span className="text-[15px] sm:text-base leading-relaxed break-words">新北市板橋區民生路三段30-1號1樓</span>
-                          <span className="text-[12px] sm:text-[13px] text-stone-600 font-bold border border-sage-200 rounded-md px-2 py-0.5 bg-sage-50 inline-block shrink-0">導航</span>
-                        </a>
-                        <div className="text-stone-500 text-[14px] sm:text-[15px] mt-1.5 leading-relaxed">
-                          (新埔站/ 新埔民生站 步行1分鐘)
+                  <section>
+                    <p className="brand-story-eyebrow">SIGNATURE CARE</p>
+                    <h3 className="brand-story-heading">店內奢華禮遇與服務</h3>
+                    <div className="mt-2 divide-y divide-sage-100">
+                      <article className="brand-service-item">
+                        <span className="brand-service-index">01</span>
+                        <div>
+                          <h4>法國 Florihana 芳療家</h4>
+                          <p className="brand-service-subtitle">頂級有機芳療護理</p>
+                          <p>我們全店採用法國頂級有機品牌 Florihana 精油。每一滴，都凝聚了南法高原最純淨的植物能量，透過芳療師細緻溫熱的手技，溫柔撫平身心每一處緊繃，帶來無可比擬的深層釋放。</p>
                         </div>
+                      </article>
+                      <article className="brand-service-item">
+                        <span className="brand-service-index">02</span>
+                        <div>
+                          <h4>專業經絡與深層運動按摩</h4>
+                          <p className="brand-service-subtitle">深度解構筋膜緊繃，重啟身體無壓的輕盈流動</p>
+                          <p>直擊酸痛核心！結合專業東西方按摩技法，深層瓦解緊繃肌群，釋放被壓力與疲勞積壓的關節，還原身體久違的鬆彈與自由。</p>
+                        </div>
+                      </article>
+                      <article className="brand-service-item">
+                        <span className="brand-service-index">03</span>
+                        <div>
+                          <h4>醫學級 InBody 數據解密</h4>
+                          <p className="brand-service-subtitle">精準透視身體組成，定義健康與體態的黃金比例</p>
+                        </div>
+                      </article>
+                      <article className="brand-service-item">
+                        <span className="brand-service-index">04</span>
+                        <div>
+                          <h4>尊榮專屬款待</h4>
+                          <p className="brand-service-subtitle">迎賓花草茶、獨立淋浴空間、課後頂級優質蛋白飲</p>
+                          <p>從一杯暖心的有機迎賓茶開始，到獨立淋浴房的放鬆沐浴，最後以精準修復的優質蛋白飲完美收尾。全流程專屬款待，只為成就最好的您。</p>
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+
+                  <section className="brand-contact">
+                    <p className="brand-story-eyebrow">VISIT US</p>
+                    <h3 className="brand-story-heading">營業與聯絡資訊</h3>
+                    <div className="brand-contact-list">
+                      <div>
+                        <Clock />
+                        <span><strong>營業時間</strong>每日 10:00–22:00</span>
+                      </div>
+                      <div>
+                        <MapPin />
+                        <span>
+                          <strong>店鋪地址</strong>
+                          <a href="https://www.google.com/maps/search/?api=1&query=新北市板橋區民生路三段30-1號1樓" target="_blank" rel="noopener noreferrer">
+                            新北市板橋區民生路三段30-1號1樓
+                            <em>導航</em>
+                          </a>
+                          <small>新埔站／新埔民生站，步行約 1 分鐘</small>
+                        </span>
+                      </div>
+                      <div>
+                        <Phone />
+                        <span><strong>預約專線</strong><a href="tel:0222521711">02-2252-1711</a></span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-sage-500" />
-                      <span><strong>預約專線：</strong>02-2252-1711</span>
-                    </div>
-                  </div>
+                  </section>
                 </div>
               </div>
             </div>
@@ -2014,7 +2013,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
               </div>
 
               {/* Step Content Shell */}
-              <div className="p-4 sm:p-8 flex-1">
+              <div className={`flex-1 ${step === 1 && loginType === 'staff' ? 'p-2 sm:p-4 lg:p-8' : 'p-4 sm:p-8'}`}>
                 
                 {/* STEP 1: LOGIN & REGISTRATION */}
                 {step === 1 && (
@@ -2169,14 +2168,13 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                         </div>
                       </div>
                     ) : (
-                      <form onSubmit={handleStaffLogin} autoComplete="on" className="space-y-5 animate-in fade-in duration-200">
-                        <h2 className="staff-login-title text-[17px] sm:text-xl font-bold text-sage-900 mb-6 text-center flex items-center justify-center gap-2 font-sans leading-tight">
-                          <User className="w-5 h-5 text-sage-500 shrink-0" />
-                          <span className="whitespace-nowrap">ZEN FLOW 工作人員由此登入</span>
+                      <form onSubmit={handleStaffLogin} autoComplete="on" className="staff-login-form space-y-4 p-6 sm:p-8 animate-in fade-in duration-200">
+                        <h2 className="staff-login-title text-xl sm:text-[22px] font-black text-sage-950 mb-5 text-center font-sans leading-tight tracking-[0.025em]">
+                          <span>ZEN FLOW 工作人員由此登入</span>
                         </h2>
 
                         {visibleRememberedStaffUsers.length > 0 && (
-                          <div className="rounded-xl border border-sage-100 bg-sage-50/70 p-3.5 space-y-2.5">
+                          <div className="staff-remembered-panel rounded-xl border border-sage-100 bg-sage-50/70 p-3 space-y-2.5">
                             <div className="flex items-center justify-between gap-3">
                               <p className="text-sm font-black text-sage-900">快速選擇身分</p>
                               <span className="text-[11px] font-bold text-stone-400">此裝置已驗證</span>
@@ -2187,7 +2185,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                                   <button
                                     type="button"
                                     onClick={() => handleRememberedStaffLogin(savedUser)}
-                                    className="min-w-0 flex-1 rounded-lg border border-sage-200 bg-white px-3.5 py-2.5 text-left shadow-sm transition hover:border-sage-400 hover:bg-sage-50"
+                                    className="staff-remembered-choice min-w-0 flex-1 rounded-lg border border-sage-200 bg-white px-3.5 py-2 text-left shadow-sm transition hover:border-sage-400 hover:bg-sage-50"
                                   >
                                     <span className="block truncate text-[15px] font-black text-stone-900">{savedUser.name || savedUser.phone}</span>
                                     <span className="mt-0.5 block text-xs font-bold text-sage-700">{savedUser.role === 'admin' ? '系統管理員' : '店內人員'}</span>
@@ -2242,7 +2240,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                         <div>
                           <label className="block text-sm font-medium text-stone-600 mb-1.5">帳號 (手機號碼 或 admin)</label>
                           <div className="relative">
-                            <Phone className="absolute left-3.5 top-3.5 h-5 w-5 text-sage-400" />
+                            <Phone className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-sage-400" />
                             <input 
                               type="text" 
                               name="username"
@@ -2250,7 +2248,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                               inputMode="text"
                               value={staffPhone} 
                               onChange={e => setStaffPhone(e.target.value)}
-                              className="w-full pl-11 pr-4 py-3 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base transition"
+                              className="staff-login-input w-full pl-11 pr-4 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-[15px] transition"
                               placeholder="請輸入帳號"
                             />
                           </div>
@@ -2264,12 +2262,12 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                             autoComplete="current-password"
                             value={staffPassword} 
                             onChange={e => setStaffPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-base transition text-center tracking-[0.3em] font-sans"
+                            className="staff-login-input w-full px-4 bg-white border border-sage-200 rounded-xl focus:ring-2 focus:ring-sage-400 focus:border-sage-500 outline-none text-[15px] transition text-center tracking-[0.3em] font-sans"
                             placeholder="••••••"
                           />
                         </div>
 
-                        <label className="flex items-center justify-center gap-2 rounded-xl border border-sage-100 bg-white/70 px-3 py-2.5 text-xs font-bold text-stone-600">
+                        <label className="staff-remember-device flex items-center justify-start gap-2 px-0 py-1 text-sm font-bold text-stone-600">
                           <input
                             type="checkbox"
                             checked={rememberStaffDevice}
@@ -2281,7 +2279,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
 
                         <button 
                           type="submit" 
-                          className="w-full py-4 bg-sage-800 text-white rounded-xl hover:bg-sage-700 transition duration-200 font-bold text-base shadow-sm font-sans"
+                          className="staff-login-submit w-full py-4.5 bg-sage-800 text-white rounded-2xl hover:bg-sage-700 transition duration-200 font-black text-[17px] shadow-lg shadow-sage-200 font-sans"
                         >
                           登入系統
                         </button>
