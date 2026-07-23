@@ -272,6 +272,210 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     gap: 0.35rem !important;
   }
 }
+
+/* Staff login is intentionally more compact than the general tablet UI.
+   This keeps the form aligned with the customer LINE login card. */
+.staff-login-input {
+  height: 3rem;
+  min-height: 3rem;
+}
+
+.staff-remember-device {
+  min-height: auto;
+}
+
+.brand-story-eyebrow {
+  margin-bottom: 0.35rem;
+  color: #73856f;
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.22em;
+}
+
+.brand-story-heading {
+  border-bottom: 1px solid #dfe7dc;
+  padding-bottom: 0.65rem;
+  color: #253128;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.brand-story-copy {
+  color: #57534e;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.85;
+}
+
+.brand-story-copy strong {
+  color: #292524;
+  font-weight: 800;
+}
+
+.brand-story-lead {
+  color: #253128;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.brand-service-item {
+  display: grid;
+  grid-template-columns: 1.7rem minmax(0, 1fr);
+  gap: 0.65rem;
+  padding: 1.05rem 0;
+}
+
+.brand-service-index {
+  padding-top: 0.15rem;
+  color: #81917d;
+  font-size: 0.625rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.brand-service-item h4 {
+  color: #292524;
+  font-size: 0.95rem;
+  font-weight: 900;
+  line-height: 1.5;
+}
+
+.brand-service-item p {
+  margin-top: 0.45rem;
+  color: #68635e;
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.78;
+}
+
+.brand-service-item .brand-service-subtitle {
+  margin-top: 0.15rem;
+  color: #566653;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+.brand-contact {
+  border-top: 1px solid #dfe7dc;
+  padding-top: 1.5rem;
+}
+
+.brand-contact-list {
+  margin-top: 1rem;
+}
+
+.brand-contact-list > div {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  gap: 0.7rem;
+  border-bottom: 1px solid #ecefeb;
+  padding: 0.8rem 0;
+  color: #57534e;
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+.brand-contact-list > div:last-child {
+  border-bottom: 0;
+}
+
+.brand-contact-list svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-top: 0.25rem;
+  color: #73856f;
+}
+
+.brand-contact-list strong {
+  display: block;
+  margin-bottom: 0.1rem;
+  color: #292524;
+  font-weight: 900;
+}
+
+.brand-contact-list a {
+  color: #566653;
+  font-weight: 700;
+}
+
+.brand-contact-list em {
+  display: inline-block;
+  margin-left: 0.45rem;
+  border-bottom: 1px solid #81917d;
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.brand-contact-list small {
+  display: block;
+  margin-top: 0.15rem;
+  color: #8a8580;
+  font-size: 0.76rem;
+}
+
+@media (min-width: 700px) and (max-width: 1180px) {
+  .staff-login-form {
+    padding: 1.5rem 1.75rem !important;
+    row-gap: 0.85rem !important;
+  }
+
+  .staff-login-title {
+    margin-bottom: 1rem !important;
+    font-size: 1.18rem !important;
+    line-height: 1.45rem !important;
+  }
+
+  .staff-login-input {
+    height: 3rem !important;
+    min-height: 3rem !important;
+    font-size: 0.88rem !important;
+    line-height: 1.2rem !important;
+  }
+
+  .staff-remembered-panel {
+    padding: 0.7rem !important;
+  }
+
+  .staff-remembered-choice {
+    min-height: 3.2rem !important;
+    padding: 0.45rem 0.75rem !important;
+  }
+
+  .staff-remember-device {
+    min-height: 2rem !important;
+    padding: 0.15rem 0 !important;
+    font-size: 0.82rem !important;
+    line-height: 1.15rem !important;
+  }
+
+  .staff-login-submit {
+    min-height: 3.25rem !important;
+    font-size: 0.95rem !important;
+  }
+
+  .brand-story-eyebrow {
+    font-size: 0.7rem !important;
+  }
+
+  .brand-story-heading {
+    font-size: 1.15rem !important;
+    line-height: 1.55rem !important;
+  }
+
+  .brand-story-copy,
+  .brand-service-item p,
+  .brand-contact-list > div {
+    font-size: 0.9rem !important;
+    line-height: 1.65rem !important;
+  }
+
+  .brand-service-item h4,
+  .brand-story-lead {
+    font-size: 1.02rem !important;
+    line-height: 1.45rem !important;
+  }
+}
 /* Booking notices are long-form reading surfaces on phones and tablets. */
 .booking-notice > button {
   min-height: 36px;
