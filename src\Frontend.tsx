@@ -1718,11 +1718,11 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       )}
       
       {/* HEADER FOR MOBILE / TABLET */}
-      <div className={`member-mobile-header lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
+      <div className={`lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
         <div className={step === 1 ? 'text-center' : 'grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 min-[390px]:gap-3'}>
           <div className={step === 1 ? 'inline-flex flex-col items-stretch' : 'min-w-0 h-[62px] flex flex-col justify-between py-0.5'}>
-            <h1 className={`member-header-wordmark zen-flow-wordmark leading-[0.9] text-sage-900 whitespace-nowrap ${step === 1 ? 'text-[48px] min-[390px]:text-[54px] tracking-[0.02em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
-            <p className={`member-header-tagline ${step === 1 ? 'mt-1 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.04em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
+            <h1 className={`zen-flow-wordmark leading-[0.9] text-sage-900 whitespace-nowrap ${step === 1 ? 'text-[48px] min-[390px]:text-[54px] tracking-[0.02em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
+            <p className={`${step === 1 ? 'mt-1 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.04em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
               {step === 1 ? (
                 <><span>Massage,</span><span>Fitness</span><span>&amp;</span><span>Nutrition</span></>
               ) : 'Massage, Fitness & Nutrition'}
@@ -1744,7 +1744,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         <div className={step === 1 ? 'mt-2.5 text-center' : 'mt-3 pt-3 border-t border-sage-100'}>
           {step === 2 && member ? (
             <>
-              <p className="member-header-greeting text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
+              <p className="text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
               <div className="member-summary-grid mt-3 grid grid-cols-2 gap-2">
                 <div className="member-summary-item rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0">
                   <span className="text-[13px] font-bold text-stone-500 shrink-0">生日</span>
