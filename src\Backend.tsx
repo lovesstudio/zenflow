@@ -169,6 +169,7 @@ export default function Backend() {
   const [unlockedOrderMonths, setUnlockedOrderMonths] = useState<string[]>([]);
   const [viewingTherapistStats, setViewingTherapistStats] = useState<{therapist: string, orders: Order[]} | null>(null);
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [memberPrioritySort, setMemberPrioritySort] = useState<'default' | 'therapist_rent' | 'coach_rent' | 'therapist_in' | 'coach_in' | 'gold' | 'black'>('default');
   const [showMemberSpendingId, setShowMemberSpendingId] = useState<string | null>(null);
   const [logMonthFilter, setLogMonthFilter] = useState<string>('');
   const [bonusModal, setBonusModal] = useState<{ therapist: string, kind: 'introduction' | 'gold' | 'black', month: string } | null>(null);
@@ -1234,6 +1235,32 @@ export default function Backend() {
   };
 
   const isAdmin = authedUser.role === 'admin';
+  const sortedMemberList = (() => {
+    const base = sortMembers(members);
+    if (memberPrioritySort === 'default') return base;
+
+    const isPriorityMember = (member: Member) => {
+      const selected = member.selectedIdentities || [];
+      if (memberPrioritySort === 'gold') {
+        return selected.includes('gold') || member.memberLevel === '金卡' || member.level === '金卡';
+      }
+      if (memberPrioritySort === 'black') {
+        return selected.includes('black') || member.memberLevel === '黑卡' || member.level === '黑卡';
+      }
+      const levelFallback: Record<string, string> = {
+        therapist_rent: '場租按摩師',
+        coach_rent: '場租教練',
+        therapist_in: '店內按摩師',
+        coach_in: '店內教練'
+      };
+      return selected.includes(memberPrioritySort) || member.level === levelFallback[memberPrioritySort];
+    };
+
+    return [
+      ...base.filter(isPriorityMember),
+      ...base.filter(member => !isPriorityMember(member))
+    ];
+  })();
 
   return (
     <div className="bg-[#FAF9F6] min-h-screen text-stone-800 font-sans">
@@ -2890,20 +2917,36 @@ export default function Backend() {
            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-visible">
              <div className="px-5 md:px-6 py-4 border-b border-stone-200 bg-stone-50 flex items-center justify-between gap-3">
                <h2 className="backend-page-title">會員列表</h2>
-               <span className="text-[11px] md:text-xs font-bold text-stone-400 whitespace-nowrap">依姓氏筆畫排序</span>
+               <label className="flex items-center gap-2 min-w-0">
+                 <span className="hidden sm:inline text-[11px] md:text-xs font-bold text-stone-400 whitespace-nowrap">優先顯示</span>
+                 <select
+                   value={memberPrioritySort}
+                   onChange={event => setMemberPrioritySort(event.target.value as typeof memberPrioritySort)}
+                   className="member-priority-select h-10 min-h-0 rounded-lg border border-stone-200 bg-white px-3 pr-8 text-[12px] md:text-sm font-bold text-stone-700 shadow-sm outline-none focus:border-sage-400"
+                   aria-label="會員優先排序"
+                 >
+                   <option value="default">依姓氏筆畫排序</option>
+                   <option value="therapist_rent">場租按摩師優先</option>
+                   <option value="coach_rent">場租教練優先</option>
+                   <option value="therapist_in">店內按摩師優先</option>
+                   <option value="coach_in">店內教練優先</option>
+                   <option value="gold">金卡會員優先</option>
+                   <option value="black">黑卡會員優先</option>
+                 </select>
+               </label>
              </div>
              <div>
                <table className="member-list-table member-list-readable w-full text-left text-sm table-fixed">
                  <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
                    <tr>
-                     <th className="member-name-cell pl-3 md:pl-6 pr-1 py-3 font-medium text-left w-[31%] md:w-[34%]">姓名</th>
+                     <th className="member-name-cell pl-5 md:pl-8 pr-1 py-3 font-medium text-left w-[31%] md:w-[34%]">姓名</th>
                      <th className="px-1.5 py-3 font-medium w-[28%] md:w-[22%] text-left">LINE ID</th>
                      <th className="px-1 py-3 font-medium w-[33%] md:w-[36%] text-center text-stone-400">會員身分</th>
                      <th className="pr-4 md:pr-6 py-3 font-medium text-right w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {sortMembers(members).map(m => {
+                  {sortedMemberList.map(m => {
                     const memberOrders = orders.filter(o => o.memberId === m.id);
                     const totalSpent = memberOrders.reduce((sum, o) => sum + o.finalPrice, 0);
                     const isExpanded = expandedMemberId === m.id;
@@ -3033,13 +3076,14 @@ export default function Backend() {
                     return (
                     <React.Fragment key={m.id}>
                       <tr id={`member-row-${m.id}`} className={`hover:bg-stone-50/50 transition cursor-pointer ${isExpanded ? 'bg-stone-50' : ''}`} onClick={() => handleExpand(m)}>
-                        <td className="member-name-cell pl-3 md:pl-6 pr-1 py-4 text-left min-w-0">
+                        <td className="member-name-cell pl-5 md:pl-8 pr-1 py-4 text-left min-w-0">
                           <div className="flex flex-col gap-1">
-                            <div className="member-name-text flex items-baseline gap-1 leading-tight whitespace-nowrap">
-                              <span className="member-primary-name font-bold text-stone-800 text-[15px]">{m.name}</span>
-                              {m.therapistName && m.therapistName !== m.name && (
-                                <span className="member-staff-alias text-[10px] min-[390px]:text-[11px] font-medium text-stone-400">（{m.therapistName}）</span>
-                              )}
+                            <div className="member-name-text leading-tight whitespace-nowrap">
+                              <span className="member-primary-name font-bold text-stone-800 text-[15px]">
+                                {m.name.trim()}{m.therapistName && m.therapistName.trim() !== m.name.trim() && (
+                                  <span className="member-staff-alias text-[13px] min-[390px]:text-[14px] font-bold text-stone-600">({m.therapistName.trim()})</span>
+                                )}
+                              </span>
                             </div>
                             <div className="md:hidden text-stone-500 text-[11px] leading-none">
                               {m.id}
