@@ -19,10 +19,6 @@
 - Cloudflare 建置指令：`pnpm run build`
 - Cloudflare 部署指令：`npx wrangler deploy`
 - 輸出目錄：`dist`
-- Cloudflare 專案類型：Workers Builds（不是純靜態 Pages）
-- Production branch：GitHub 的 `main`
-- Root directory：留白（專案檔案位於儲存庫根目錄）
-- Worker 名稱必須維持 `zenflow`，以保留現有固定網域與 Dashboard secrets。
 
 ## 注意事項
 
