@@ -92,6 +92,55 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
+/* Member welcome area: keep the same readable rhythm in the desktop preview
+   as well as on physical tablets. */
+@media (min-width: 1024px) {
+  .member-step-shell {
+    padding-left: 2.5rem !important;
+    padding-right: 2.5rem !important;
+  }
+
+  .member-desktop-profile-card {
+    padding: 1.4rem 1.6rem !important;
+    border-radius: 1.15rem !important;
+  }
+
+  .member-desktop-greeting {
+    font-size: 1.28rem !important;
+    line-height: 1.65rem !important;
+  }
+
+  .member-desktop-summary-grid {
+    gap: 0.7rem !important;
+  }
+
+  .member-desktop-summary-item {
+    min-height: 3.45rem;
+    padding: 0.75rem 0.95rem !important;
+    gap: 0.55rem !important;
+    font-size: 1rem !important;
+    line-height: 1.3rem !important;
+  }
+
+  .member-desktop-summary-item > span:first-child {
+    min-width: 2.5rem;
+    font-size: 1rem !important;
+  }
+
+  .member-desktop-summary-item > span:last-child {
+    font-size: 1.06rem !important;
+  }
+
+  .member-desktop-summary-item details > summary {
+    font-size: 0.95rem !important;
+    line-height: 1.2rem !important;
+  }
+
+  .member-desktop-summary-item details > div {
+    min-width: 8.5rem !important;
+  }
+}
+
 /* Tablet readability boost. iPad mini portrait is below Tailwind's md breakpoint,
    while larger iPads still benefit from a calmer proportional scale. */
 @media (min-width: 700px) and (max-width: 1180px) {
@@ -241,30 +290,85 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   }
 
   .member-staff-alias {
-    font-size: 0.88rem !important;
-    line-height: 1.2rem !important;
-    color: #78716c !important;
+    display: inline !important;
+    margin-left: 0 !important;
+    font-size: 0.96rem !important;
+    line-height: inherit !important;
+    color: #57534e !important;
+    font-weight: 700 !important;
   }
 
   .member-summary-grid {
-    gap: 0.7rem !important;
+    gap: 0.85rem !important;
   }
 
   .member-summary-item {
-    min-height: 3.55rem;
-    padding: 0.75rem 1rem !important;
-    gap: 0.65rem !important;
+    min-height: 4.65rem;
+    padding: 1rem 1.35rem !important;
+    gap: 0.8rem !important;
   }
 
   .member-summary-item > span:first-child {
-    min-width: 2.6rem;
-    font-size: 0.96rem !important;
-    line-height: 1.2rem !important;
+    min-width: 3.2rem;
+    font-size: 1.14rem !important;
+    line-height: 1.4rem !important;
   }
 
   .member-summary-item > span:last-child,
   .member-summary-item > details {
-    font-size: 1rem !important;
+    font-size: 1.22rem !important;
+    line-height: 1.5rem !important;
+  }
+
+  .member-mobile-header {
+    padding: 1.9rem 2.6rem 2.1rem !important;
+  }
+
+  .member-header-wordmark {
+    font-size: clamp(3.3rem, 6vw, 4.35rem) !important;
+    line-height: 0.88 !important;
+  }
+
+  .member-header-tagline {
+    height: auto !important;
+    margin-top: 0.55rem !important;
+    font-size: 0.9rem !important;
+    line-height: 1rem !important;
+    letter-spacing: 0.01em;
+  }
+
+  .member-header-greeting {
+    margin-top: 0.2rem;
+    font-size: 1.42rem !important;
+    line-height: 1.75rem !important;
+  }
+
+  .member-summary-item > details {
+    position: relative;
+    max-width: calc(100% - 4.8rem);
+  }
+
+  .member-summary-item > details > summary {
+    max-width: 100%;
+    gap: 0.3rem !important;
+    font-size: 1.12rem !important;
+    line-height: 1.4rem !important;
+  }
+
+  .member-summary-item > details > summary svg {
+    width: 1rem !important;
+    height: 1rem !important;
+    flex-shrink: 0;
+  }
+
+  .member-summary-item > details > div {
+    min-width: 9.5rem !important;
+    padding: 0.55rem !important;
+  }
+
+  .member-summary-item > details > div > div {
+    padding: 0.45rem 0.65rem !important;
+    font-size: 0.94rem !important;
     line-height: 1.25rem !important;
   }
 
