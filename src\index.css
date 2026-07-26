@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Noto Sans TC", "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", Georgia, serif;
   --font-mono: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --color-sage-50: #FAF9F6;
@@ -174,6 +174,131 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     font-size: 0.95rem !important;
     line-height: 1.2rem !important;
     min-height: 2.25rem !important;
+  }
+
+  .promotion-status-badge,
+  .promotion-action-buttons button {
+    min-height: 2.65rem !important;
+    font-size: 0.92rem !important;
+    line-height: 1.15rem !important;
+  }
+
+  .promotion-action-buttons {
+    gap: 0.75rem !important;
+  }
+
+  .order-list-grid {
+    grid-template-columns: 6rem minmax(0, 1fr) 8.25rem 1.5rem !important;
+    column-gap: 0.55rem;
+  }
+
+  .order-status-select {
+    min-height: 2.45rem !important;
+    padding-left: 0.45rem !important;
+    padding-right: 1.2rem !important;
+    font-size: 0.78rem !important;
+    line-height: 1rem !important;
+    white-space: nowrap;
+  }
+
+  .order-service-heading,
+  .order-service-cell {
+    transform: none !important;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+
+  .order-service-cell > span {
+    font-size: 0.9rem !important;
+    line-height: 1.2rem !important;
+  }
+
+  .member-list-readable th:first-child,
+  .member-list-readable td:first-child {
+    width: 29% !important;
+  }
+
+  .member-list-readable th:nth-child(2),
+  .member-list-readable td:nth-child(2) {
+    width: 27% !important;
+  }
+
+  .member-list-readable th:nth-child(3),
+  .member-list-readable td:nth-child(3) {
+    width: 36% !important;
+  }
+
+  .member-list-readable td {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    font-size: 0.96rem !important;
+    line-height: 1.35rem !important;
+  }
+
+  .member-primary-name {
+    font-size: 1.08rem !important;
+    line-height: 1.35rem !important;
+  }
+
+  .member-staff-alias {
+    font-size: 0.88rem !important;
+    line-height: 1.2rem !important;
+    color: #78716c !important;
+  }
+
+  .member-summary-grid {
+    gap: 0.85rem !important;
+  }
+
+  .member-summary-item {
+    min-height: 4.4rem;
+    padding: 0.95rem 1.25rem !important;
+    gap: 0.75rem !important;
+  }
+
+  .member-summary-item > span:first-child {
+    min-width: 3rem;
+    font-size: 1.08rem !important;
+    line-height: 1.3rem !important;
+  }
+
+  .member-summary-item > span:last-child,
+  .member-summary-item > details {
+    font-size: 1.14rem !important;
+    line-height: 1.4rem !important;
+  }
+
+  .member-mobile-header {
+    padding: 1.8rem 2rem 2rem !important;
+  }
+
+  .member-header-wordmark {
+    font-size: clamp(3.3rem, 6vw, 4.35rem) !important;
+    line-height: 0.88 !important;
+  }
+
+  .member-header-tagline {
+    height: auto !important;
+    margin-top: 0.55rem !important;
+    font-size: 0.9rem !important;
+    line-height: 1rem !important;
+    letter-spacing: 0.01em;
+  }
+
+  .member-header-greeting {
+    margin-top: 0.2rem;
+    font-size: 1.42rem !important;
+    line-height: 1.75rem !important;
+  }
+
+  .fitness-booking-section {
+    padding: 1.25rem 1.35rem !important;
+  }
+
+  .fitness-booking-section p,
+  .fitness-booking-section [class*="BookingHint"] {
+    font-size: 1rem !important;
+    line-height: 1.7rem !important;
   }
 
   .member-edit-field {
