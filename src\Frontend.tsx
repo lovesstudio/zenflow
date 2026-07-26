@@ -1718,11 +1718,11 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
       )}
       
       {/* HEADER FOR MOBILE / TABLET */}
-      <div className={`lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
+      <div className={`member-mobile-header lg:hidden bg-white border-b border-sage-100 shadow-sm ${step === 1 ? 'px-5 py-7' : 'px-3 min-[390px]:px-4 py-4'}`}>
         <div className={step === 1 ? 'text-center' : 'grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 min-[390px]:gap-3'}>
           <div className={step === 1 ? 'inline-flex flex-col items-stretch' : 'min-w-0 h-[62px] flex flex-col justify-between py-0.5'}>
-            <h1 className={`zen-flow-wordmark leading-[0.9] text-sage-900 whitespace-nowrap ${step === 1 ? 'text-[48px] min-[390px]:text-[54px] tracking-[0.02em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
-            <p className={`${step === 1 ? 'mt-1 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.04em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
+            <h1 className={`member-header-wordmark zen-flow-wordmark leading-[0.9] text-sage-900 whitespace-nowrap ${step === 1 ? 'text-[48px] min-[390px]:text-[54px] tracking-[0.02em]' : 'text-[38px] min-[390px]:text-[44px]'}`}>ZEN FLOW</h1>
+            <p className={`member-header-tagline ${step === 1 ? 'mt-1 flex w-full items-center justify-between text-[11px] min-[390px]:text-[12px] tracking-[0.04em]' : 'h-4 flex items-end text-[10px] min-[390px]:text-[11px]'} leading-none text-sage-600 font-bold uppercase whitespace-nowrap`}>
               {step === 1 ? (
                 <><span>Massage,</span><span>Fitness</span><span>&amp;</span><span>Nutrition</span></>
               ) : 'Massage, Fitness & Nutrition'}
@@ -1744,7 +1744,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
         <div className={step === 1 ? 'mt-2.5 text-center' : 'mt-3 pt-3 border-t border-sage-100'}>
           {step === 2 && member ? (
             <>
-              <p className="text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
+              <p className="member-header-greeting text-[19px] leading-tight font-black text-stone-900 whitespace-nowrap">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
               <div className="member-summary-grid mt-3 grid grid-cols-2 gap-2">
                 <div className="member-summary-item rounded-md border border-sage-100 bg-sage-50/60 px-2.5 py-2.5 flex items-center gap-1.5 min-w-0">
                   <span className="text-[13px] font-bold text-stone-500 shrink-0">生日</span>
@@ -1952,7 +1952,7 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
               </div>
 
               {/* Step Content Shell */}
-              <div className="p-4 sm:p-8 flex-1">
+              <div className="member-step-shell p-4 sm:p-8 flex-1">
                 
                 {/* STEP 1: LOGIN & REGISTRATION */}
                 {step === 1 && (
@@ -2250,20 +2250,20 @@ export default function Frontend({ onNavigateToBackend }: { onNavigateToBackend?
                   <div className="space-y-6 animate-in fade-in duration-300">
                     
                     {/* Member Profile Dashboard Card */}
-                    <div className={`bg-sage-50/70 p-4 sm:p-5 rounded-2xl border border-sage-100 flex-col md:flex-row justify-between gap-4 ${welcomeIsVenueRentMember && !welcomeIsPremiumMember ? 'flex' : 'hidden lg:flex'}`}>
+                    <div className={`member-desktop-profile-card bg-sage-50/70 p-4 sm:p-5 rounded-2xl border border-sage-100 flex-col md:flex-row justify-between gap-4 ${welcomeIsVenueRentMember && !welcomeIsPremiumMember ? 'flex' : 'hidden lg:flex'}`}>
                       <div className="hidden lg:block space-y-3 flex-1">
-                        <p className="hidden lg:block text-stone-900 font-black text-lg sm:text-xl leading-tight">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
-                        <div className="grid grid-cols-2 gap-2 text-[11px] sm:text-sm text-stone-600 font-semibold">
-                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
+                        <p className="member-desktop-greeting hidden lg:block text-stone-900 font-black text-lg sm:text-xl leading-tight">親愛的 {getFriendlyDisplayName(member.name)}，{getGreetingPeriod()}您好!!</p>
+                        <div className="member-desktop-summary-grid grid grid-cols-2 gap-2 text-[11px] sm:text-sm text-stone-600 font-semibold">
+                          <div className="member-desktop-summary-item bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span className="shrink-0 text-stone-500">生日</span><span className="shrink-0 text-stone-300">|</span><span className="min-w-0 font-sans font-bold text-stone-800 text-[11px] sm:text-sm whitespace-nowrap">{member.birthday}</span>
                           </div>
-                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
+                          <div className="member-desktop-summary-item bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span className="shrink-0 text-stone-500">星座</span><span className="shrink-0 text-stone-300">|</span><span className="min-w-0 font-bold text-stone-800 text-[11px] sm:text-sm whitespace-nowrap">{getZodiacSign(member.birthday)}</span>
                           </div>
-                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
+                          <div className="member-desktop-summary-item bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-hidden">
                             <span className="shrink-0 text-stone-500">電話</span><span className="shrink-0 text-stone-300">|</span><span className="min-w-0 font-sans font-bold text-stone-800 text-[11px] sm:text-sm whitespace-nowrap">{member.id}</span>
                           </div>
-                          <div className="bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-visible">
+                          <div className="member-desktop-summary-item bg-white/80 px-2 py-2 rounded-lg border border-sage-100/50 min-w-0 flex items-center gap-1 whitespace-nowrap overflow-visible">
                             <span className="shrink-0 text-stone-500">身分</span><span className="shrink-0 text-stone-300">|</span>{(() => {
                               const identityLabels = getMemberIdentityLabels(member);
                               const primaryIdentity = identityLabels[0] || member.level;
