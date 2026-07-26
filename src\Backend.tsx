@@ -1,42 +1,10 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { db, COURSES, Member, Order, MemberLevel, timeToMins, minsToTime, Gender, ALL_TIME_SLOTS, sortOrderItems, TherapistAvailability, Promotion } from './store';
 import { Trash2, TrendingUp, Users, Calendar, DollarSign, Clock, Search, CheckCircle, XCircle, CalendarDays, Lock, LogOut, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Plus, User, X, Send } from 'lucide-react';
 
-const parseBirthdayString = (input: string): string => {
-  if (!input) return '';
-  const trimmed = input.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-  if (/^\d{8}$/.test(trimmed)) {
-    const y = trimmed.slice(0, 4);
-    const m = trimmed.slice(4, 6);
-    const d = trimmed.slice(6, 8);
-    const mi = parseInt(m, 10);
-    const di = parseInt(d, 10);
-    if (mi >= 1 && mi <= 12 && di >= 1 && di <= 31) {
-      return `${y}-${m}-${d}`;
-    }
-  }
-  const match = trimmed.match(/^(\d{4})[-/.\s](\d{1,2})[-/.\s](\d{1,2})$/);
-  if (match) {
-    const y = match[1];
-    const m = match[2].padStart(2, '0');
-    const d = match[3].padStart(2, '0');
-    const mi = parseInt(m, 10);
-    const di = parseInt(d, 10);
-    if (mi >= 1 && mi <= 12 && di >= 1 && di <= 31) {
-      return `${y}-${m}-${d}`;
-    }
-  }
-  return trimmed;
-};
-
 const getZodiacSign = (dateStr: string) => {
-  if (!dateStr) return '';
-  const parsed = parseBirthdayString(dateStr);
-  if (!parsed || !parsed.includes('-')) return '';
-  const [year, month, day] = parsed.split('-').map(Number);
+  if (!dateStr || !dateStr.includes('-')) return '';
+  const [year, month, day] = dateStr.split('-').map(Number);
   if (!month || !day) return '';
   const signs = ["摩羯座", "水瓶座", "雙魚座", "牡羊座", "金牛座", "雙子座", "巨蟹座", "獅子座", "處女座", "天秤座", "天蠍座", "射手座", "摩羯座"];
   const cutoffs = [20, 19, 21, 20, 21, 22, 23, 23, 23, 24, 22, 22];
@@ -45,17 +13,14 @@ const getZodiacSign = (dateStr: string) => {
 
 const getAge = (dateStr: string) => {
   if (!dateStr) return '';
-  const parsed = parseBirthdayString(dateStr);
-  if (!parsed || !parsed.includes('-')) return '';
-  const [year, month, day] = parsed.split('-').map(Number);
-  if (!year || !month || !day) return '';
   const today = new Date();
-  let age = today.getFullYear() - year;
-  const m = (today.getMonth() + 1) - month;
-  if (m < 0 || (m === 0 && today.getDate() < day)) {
+  const birthDate = new Date(dateStr);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
     age--;
   }
-  return age >= 0 ? `${age}歲` : '';
+  return age > 0 ? `${age}歲` : '';
 };
 
 const stripGender = (name: string) => name ? name.replace(/\(男\)|\(女\)|（男）|（女）/g, '').trim() : '';
@@ -489,7 +454,6 @@ export default function Backend() {
   const [editLineId, setEditLineId] = useState('');
   const [editGender, setEditGender] = useState<any>('女');
   const [editBirthday, setEditBirthday] = useState('');
-  const [editBirthdayText, setEditBirthdayText] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editLevel, setEditLevel] = useState<MemberLevel>('一般');
   const [editMemberLevel, setEditMemberLevel] = useState<'一般' | '金卡' | '黑卡' | undefined>(undefined);
@@ -634,8 +598,7 @@ export default function Backend() {
     setEditName(m.name);
     setEditLineId(m.lineId || '');
     setEditGender(m.gender || '女');
-    setEditBirthday(m.birthday || '');
-    setEditBirthdayText(m.birthday ? m.birthday.replace(/-/g, '/') : '');
+    setEditBirthday(m.birthday);
     setEditPhone(m.id);
     setEditLevel(m.level);
     
@@ -690,8 +653,7 @@ export default function Backend() {
       setEditName(m.name);
       setEditLineId(m.lineId || '');
       setEditGender(m.gender || '女');
-      setEditBirthday(m.birthday || '');
-      setEditBirthdayText(m.birthday ? m.birthday.replace(/-/g, '/') : '');
+      setEditBirthday(m.birthday);
       setEditPhone(m.id);
       setEditLevel(m.level);
       setEditMemberLevel(m.memberLevel);
@@ -2307,13 +2269,13 @@ export default function Backend() {
             </div>
             {(orderViewMode === 'list' || orderViewMode === 'history') && (
               <div className="flex flex-col">
-                 <div className="bg-stone-50/80 px-4 md:px-6 py-2 border-b border-stone-200 grid grid-cols-[58px_minmax(0,1fr)_50px_14px] md:grid-cols-[78px_minmax(0,1fr)_82px_22px] items-center text-[11px] font-bold text-stone-400 uppercase tracking-widest sticky top-0 z-10">
+                 <div className="order-list-grid bg-stone-50/80 px-4 md:px-6 py-2 border-b border-stone-200 grid grid-cols-[68px_minmax(0,1fr)_64px_14px] md:grid-cols-[96px_minmax(0,1fr)_120px_22px] items-center text-[11px] font-bold text-stone-400 uppercase tracking-widest sticky top-0 z-10">
                    <div className="-translate-x-1 flex justify-center text-[10px]">預約狀態</div>
                    <div className="min-w-0 px-1 md:px-4 font-bold leading-tight flex flex-col">
                     <span className="text-[11px]">預約資訊</span>
                     <span className="text-[11px]">顧客 / 身分 / 電話</span>
                   </div>
-                   <div className="translate-x-3 text-center text-[11px] font-bold whitespace-nowrap">服務人員</div>
+                   <div className="order-service-heading text-center text-[11px] font-bold whitespace-nowrap">服務人員</div>
                    <div></div>
                 </div>
                 <div className="divide-y divide-stone-100">
@@ -2350,7 +2312,7 @@ export default function Backend() {
 
                       return (
                          <div key={o.id} className={`transition-all ${o.status === 'completed' ? 'bg-emerald-50/20' : (o.status === 'cancelled' || o.status === 'no_show' || isPast) ? 'bg-stone-50/50 opacity-70' : 'bg-white'} hover:bg-stone-50 group`}>
-                           <div className="grid grid-cols-[58px_minmax(0,1fr)_50px_14px] md:grid-cols-[78px_minmax(0,1fr)_82px_22px] items-center px-4 md:px-6 py-4 cursor-pointer" onClick={() => toggleOrderExpand(o.id)}>
+                           <div className="order-list-grid grid grid-cols-[68px_minmax(0,1fr)_64px_14px] md:grid-cols-[96px_minmax(0,1fr)_120px_22px] items-center px-4 md:px-6 py-4 cursor-pointer" onClick={() => toggleOrderExpand(o.id)}>
                              <div className="-translate-x-1 flex justify-center" onClick={e => e.stopPropagation()}>
                                <select
                                  aria-label="預約狀態"
@@ -2360,7 +2322,7 @@ export default function Backend() {
                                    db.updateOrder(o.id, { status: e.target.value as Order['status'] });
                                    setOrders(sortOrders(db.getOrders()));
                                  }}
-                                 className={`h-8 w-full rounded-md border px-1 text-[10px] md:text-[11px] font-black outline-none transition disabled:cursor-not-allowed disabled:bg-stone-100 ${
+                                 className={`order-status-select h-9 w-full rounded-md border px-1.5 text-[11px] md:text-[12px] font-black outline-none transition disabled:cursor-not-allowed disabled:bg-stone-100 ${
                                    o.status === 'completed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
                                    o.status === 'cancelled' ? 'border-red-200 bg-red-50 text-red-600' :
                                    o.status === 'no_show' ? 'border-amber-200 bg-amber-50 text-amber-800' :
@@ -2394,7 +2356,7 @@ export default function Backend() {
                                 </span>
                               </div>
                             </div>
-                             <div className="translate-x-3 flex flex-col items-center justify-center min-w-0 overflow-hidden">
+                             <div className="order-service-cell flex flex-col items-center justify-center min-w-0 overflow-hidden">
                               {(() => {
                                 const serviceLabel = isVenueOrder ? venueRoomLabel || '未指定' : therapistDisplay;
                                 const assignedMatch = serviceLabel.match(/^(男即可|女即可)\((.+)\)$/);
@@ -2901,12 +2863,12 @@ export default function Backend() {
                     <article key={promotion.id} className="rounded-2xl border border-sage-100 bg-white p-4 shadow-sm md:p-5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2"><span className="rounded-md bg-sage-800 px-2.5 py-1 font-black tracking-wide text-white">{promotion.code}</span><span className={`rounded-md border px-2 py-1 text-xs font-black ${statusClass}`}>{statusLabel}</span></div>
+                          <div className="flex flex-wrap items-center gap-2"><span className="rounded-md bg-sage-800 px-2.5 py-1 font-black tracking-wide text-white">{promotion.code}</span><span className={`promotion-status-badge inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-black ${statusClass}`}>{statusLabel}</span></div>
                           <h4 className="mt-3 text-lg font-black text-stone-900">{promotion.name}</h4>
                         </div>
-                        <div className="flex shrink-0 gap-1.5">
-                          <button type="button" onClick={() => editPromotion(promotion)} className="rounded-lg border border-sage-100 bg-sage-50 px-3 py-2 text-sm font-black text-sage-800">編輯</button>
-                          <button type="button" onClick={() => { if (window.confirm(`確定刪除「${promotion.name}」嗎？`)) { db.deletePromotion(promotion.id); setPromotions(db.getPromotions()); if (editingPromotionId === promotion.id) resetPromotionForm(); } }} className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700">刪除</button>
+                        <div className="promotion-action-buttons flex shrink-0 gap-2.5">
+                          <button type="button" onClick={() => editPromotion(promotion)} className="rounded-lg border border-sage-100 bg-sage-50 px-3.5 py-2 text-sm font-black text-sage-800">編輯</button>
+                          <button type="button" onClick={() => { if (window.confirm(`確定刪除「${promotion.name}」嗎？`)) { db.deletePromotion(promotion.id); setPromotions(db.getPromotions()); if (editingPromotionId === promotion.id) resetPromotionForm(); } }} className="rounded-lg border border-rose-100 bg-rose-50 px-3.5 py-2 text-sm font-black text-rose-700">刪除</button>
                         </div>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-stone-100 pt-4 text-sm md:grid-cols-3">
@@ -2931,10 +2893,10 @@ export default function Backend() {
                <span className="text-[11px] md:text-xs font-bold text-stone-400 whitespace-nowrap">依姓氏筆畫排序</span>
              </div>
              <div>
-               <table className="member-list-table w-full text-left text-sm table-fixed">
+               <table className="member-list-table member-list-readable w-full text-left text-sm table-fixed">
                  <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
                    <tr>
-                     <th className="member-name-cell pl-3 md:pl-6 pr-1 py-3 font-medium text-left w-[31%] md:w-[34%]">姓名</th>
+                     <th className="member-name-cell pl-5 md:pl-8 pr-1 py-3 font-medium text-left w-[31%] md:w-[34%]">姓名</th>
                      <th className="px-1.5 py-3 font-medium w-[28%] md:w-[22%] text-left">LINE ID</th>
                      <th className="px-1 py-3 font-medium w-[33%] md:w-[36%] text-center text-stone-400">會員身分</th>
                      <th className="pr-4 md:pr-6 py-3 font-medium text-right w-8"></th>
@@ -3071,12 +3033,12 @@ export default function Backend() {
                     return (
                     <React.Fragment key={m.id}>
                       <tr id={`member-row-${m.id}`} className={`hover:bg-stone-50/50 transition cursor-pointer ${isExpanded ? 'bg-stone-50' : ''}`} onClick={() => handleExpand(m)}>
-                        <td className="member-name-cell pl-3 md:pl-6 pr-1 py-4 text-left min-w-0">
+                        <td className="member-name-cell pl-5 md:pl-8 pr-1 py-4 text-left min-w-0">
                           <div className="flex flex-col gap-1">
-                            <div className="member-name-text flex items-baseline gap-1 leading-tight whitespace-nowrap">
-                              <span className="font-bold text-stone-800 text-[15px]">{m.name}</span>
+                            <div className="member-name-text flex items-baseline gap-0 leading-tight whitespace-nowrap">
+                              <span className="member-primary-name font-bold text-stone-800 text-[15px]">{m.name}</span>
                               {m.therapistName && m.therapistName !== m.name && (
-                                <span className="text-[10px] min-[390px]:text-[11px] font-medium text-stone-400">（{m.therapistName}）</span>
+                                <span className="member-staff-alias text-[10px] min-[390px]:text-[11px] font-medium text-stone-400">({m.therapistName})</span>
                               )}
                             </div>
                             <div className="md:hidden text-stone-500 text-[11px] leading-none">
@@ -3130,30 +3092,22 @@ export default function Backend() {
                                     <div className="text-[11px] text-emerald-950 font-black mb-1">年齡</div>
                                     <div className="text-sm font-black text-stone-800 whitespace-nowrap">
                                       {getAge(m.birthday) || '未設定'}
-                                      {m.birthday && (() => {
-                                        const norm = parseBirthdayString(m.birthday);
-                                        const yr = norm ? parseInt(norm.split('-')[0], 10) : NaN;
-                                        return !isNaN(yr) && yr > 1911 ? (
-                                          <span className="text-[10px] font-bold text-stone-500 ml-1.5">
-                                            ({yr - 1911}年次)
-                                          </span>
-                                        ) : null;
-                                      })()}
+                                      {m.birthday && (
+                                        <span className="text-[10px] font-bold text-stone-500 ml-1.5">
+                                          ({parseInt(m.birthday.split('-')[0]) - 1911}年次)
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                   <div className="rounded-lg bg-white/55 px-3 py-2 border border-emerald-100/70">
                                     <div className="text-[11px] text-emerald-950 font-black mb-1">星座</div>
                                     <div className="text-sm font-black text-stone-800 whitespace-nowrap">
                                       {getZodiacSign(m.birthday) || '未設定'}
-                                      {m.birthday && (() => {
-                                        const norm = parseBirthdayString(m.birthday);
-                                        const pts = norm ? norm.split('-') : [];
-                                        return pts.length >= 3 ? (
-                                          <span className="text-[10px] font-bold text-stone-500 ml-1.5">
-                                            ({parseInt(pts[1], 10)}/{parseInt(pts[2], 10)})
-                                          </span>
-                                        ) : null;
-                                      })()}
+                                      {m.birthday && (
+                                        <span className="text-[10px] font-bold text-stone-500 ml-1.5">
+                                          ({m.birthday.split('-').slice(1).map(v => parseInt(v)).join('/')})
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                   <button
@@ -3323,19 +3277,7 @@ export default function Backend() {
                                     {(() => {
                                       const fieldClass = "member-edit-field w-full h-10 min-h-10 box-border text-[13px] leading-none px-2 py-0 bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:border-stone-500 outline-none transition";
                                       const labelClass = "block text-[10px] font-bold text-stone-500 mb-1";
-                                      
-                                      // Exclude self (member m) from staff dropdowns if m is a coach or therapist
-                                      const selfNames = new Set([m.name, m.therapistName, m.id].filter(Boolean));
-                                      const coachNames = coachMembers
-                                        .filter(cm => cm.id !== m.id && cm.name !== m.name && (!m.therapistName || cm.therapistName !== m.therapistName))
-                                        .map(cm => cm.therapistName || cm.name)
-                                        .filter((name): name is string => Boolean(name) && !selfNames.has(name));
-
-                                      const therapistNamesForMember = linkedMassageMembers
-                                        .filter(tm => tm.id !== m.id && tm.name !== m.name && (!m.therapistName || tm.therapistName !== m.therapistName))
-                                        .map(tm => tm.therapistName || tm.name)
-                                        .filter((name): name is string => Boolean(name) && !selfNames.has(name));
-
+                                      const coachNames = coachMembers.map(cm => cm.therapistName || cm.name).filter(Boolean);
                                       const completedCoachOrders = memberOrders
                                         .filter(o => o.status === 'completed' && (o.items || []).some(item => item.name.includes('1對1教練課')))
                                         .sort((a,b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''));
@@ -3360,53 +3302,18 @@ export default function Backend() {
                                             </div>
                                             <div>
                                               <label className={labelClass}>生日</label>
-                                              <div className="relative flex items-center w-full bg-stone-50 border border-stone-200 rounded-lg focus-within:bg-white focus-within:border-stone-500 transition overflow-hidden">
+                                              <div className="relative cursor-pointer">
                                                 <input 
-                                                  type="text" 
-                                                  value={editBirthdayText} 
-                                                  onChange={e => {
-                                                    const val = e.target.value;
-                                                    setEditBirthdayText(val);
-                                                    const parsed = parseBirthdayString(val);
-                                                    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
-                                                      setEditBirthday(parsed);
-                                                      handleInfoSave(m.id, { birthday: parsed });
-                                                    } else {
-                                                      setEditBirthday(val);
-                                                    }
-                                                  }}
-                                                  onBlur={() => {
-                                                    const parsed = parseBirthdayString(editBirthdayText);
-                                                    if (parsed && /^\d{4}-\d{2}-\d{2}$/.test(parsed)) {
-                                                      setEditBirthday(parsed);
-                                                      setEditBirthdayText(parsed.replace(/-/g, '/'));
-                                                      handleInfoSave(m.id, { birthday: parsed });
-                                                    } else {
-                                                      handleInfoSave(m.id, { birthday: editBirthdayText });
-                                                    }
-                                                  }}
-                                                  placeholder="例: 1990/05/20 或點選日曆" 
-                                                  className={`${fieldClass} border-0 bg-transparent flex-1 focus:bg-transparent min-w-0 font-medium`}
+                                                  type="date" 
+                                                  value={editBirthday} 
+                                                  onChange={e=>setEditBirthday(e.target.value)} 
+                                                  onBlur={()=>handleInfoSave(m.id)} 
+                                                  onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
+                                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+                                                  style={{ colorScheme: 'light' }}
                                                 />
-                                                <div className="relative shrink-0 pr-2 flex items-center justify-center cursor-pointer">
-                                                  <input 
-                                                    type="date" 
-                                                    value={editBirthday && /^\d{4}-\d{2}-\d{2}$/.test(editBirthday) ? editBirthday : ''} 
-                                                    onChange={e => {
-                                                      const val = e.target.value;
-                                                      if (val) {
-                                                        setEditBirthday(val);
-                                                        setEditBirthdayText(val.replace(/-/g, '/'));
-                                                        handleInfoSave(m.id, { birthday: val });
-                                                      }
-                                                    }} 
-                                                    onClick={(e) => { try { (e.target as any).showPicker() } catch(err){} }}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                                                    style={{ colorScheme: 'light' }}
-                                                  />
-                                                  <button type="button" className="p-1 text-stone-400 hover:text-stone-600 transition" title="開啟日曆選單">
-                                                    <Calendar className="w-3.5 h-3.5" />
-                                                  </button>
+                                                <div className={`${fieldClass} flex items-center text-stone-800`}>
+                                                  <span className={editBirthday ? "" : "text-stone-400 truncate"}>{editBirthday ? editBirthday.replace(/-/g, '/') : '年/月/日'}</span>
                                                 </div>
                                               </div>
                                             </div>
@@ -3451,7 +3358,7 @@ export default function Backend() {
                                                 handleInfoSave(m.id, { primaryTherapist: e.target.value });
                                               }} className={fieldClass}>
                                                 <option value="">(無)</option>
-                                                {therapistNamesForMember.map(name => (
+                                                {[...maleTherapists, ...femaleTherapists].map(name => (
                                                   <option key={name} value={name}>{name}</option>
                                                 ))}
                                               </select>
@@ -3965,13 +3872,13 @@ export default function Backend() {
       .filter(order => (order.items || []).length > 0)
       .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
 
-    const historyMonths: string[] = Array.from(new Set<string>(assignedOrders.map(order => order.date.slice(0, 7)))).sort((a: string, b: string) => b.localeCompare(a));
+    const historyMonths = Array.from(new Set(assignedOrders.map(order => order.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a));
     const visibleOrders = therapistHistoryMonth === null
       ? []
       : therapistHistoryMonth === 'all'
         ? assignedOrders
         : assignedOrders.filter(order => order.date.startsWith(therapistHistoryMonth));
-    const salaryMonths: string[] = historyMonths.filter((month: string) => month < currentMonth);
+    const salaryMonths = historyMonths.filter(month => month < currentMonth);
 
     const getMonthlySalary = (month: string) => {
       const monthOrders = assignedOrders.filter(order => order.date.startsWith(month) && order.status !== 'cancelled');
