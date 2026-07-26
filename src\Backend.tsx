@@ -2896,7 +2896,7 @@ export default function Backend() {
                <table className="member-list-table member-list-readable w-full text-left text-sm table-fixed">
                  <thead className="bg-stone-50/50 text-stone-500 border-b border-stone-100 whitespace-nowrap">
                    <tr>
-                     <th className="member-name-cell pl-5 md:pl-8 pr-1 py-3 font-medium text-left w-[31%] md:w-[34%]">姓名</th>
+                     <th className="member-name-cell pl-3 md:pl-6 pr-1 py-3 font-medium text-left w-[31%] md:w-[34%]">姓名</th>
                      <th className="px-1.5 py-3 font-medium w-[28%] md:w-[22%] text-left">LINE ID</th>
                      <th className="px-1 py-3 font-medium w-[33%] md:w-[36%] text-center text-stone-400">會員身分</th>
                      <th className="pr-4 md:pr-6 py-3 font-medium text-right w-8"></th>
@@ -3033,12 +3033,12 @@ export default function Backend() {
                     return (
                     <React.Fragment key={m.id}>
                       <tr id={`member-row-${m.id}`} className={`hover:bg-stone-50/50 transition cursor-pointer ${isExpanded ? 'bg-stone-50' : ''}`} onClick={() => handleExpand(m)}>
-                        <td className="member-name-cell pl-5 md:pl-8 pr-1 py-4 text-left min-w-0">
+                        <td className="member-name-cell pl-3 md:pl-6 pr-1 py-4 text-left min-w-0">
                           <div className="flex flex-col gap-1">
-                            <div className="member-name-text flex items-baseline gap-0 leading-tight whitespace-nowrap">
+                            <div className="member-name-text flex items-baseline gap-1 leading-tight whitespace-nowrap">
                               <span className="member-primary-name font-bold text-stone-800 text-[15px]">{m.name}</span>
                               {m.therapistName && m.therapistName !== m.name && (
-                                <span className="member-staff-alias text-[10px] min-[390px]:text-[11px] font-medium text-stone-400">({m.therapistName})</span>
+                                <span className="member-staff-alias text-[10px] min-[390px]:text-[11px] font-medium text-stone-400">（{m.therapistName}）</span>
                               )}
                             </div>
                             <div className="md:hidden text-stone-500 text-[11px] leading-none">
